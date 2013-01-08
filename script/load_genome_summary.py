@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import argparsers
+import vcf
+
 import MySQLdb
 import csv
 import fileinput
@@ -27,49 +29,12 @@ def main():
             passwd=args.password,
             db=args.db)
 
+    # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
+    # the error:
+    # Got temporary error 233 'Out of operation records in transaction coordinator (increase MaxNoOfConcurrentOperations)' from NDBCLUSTER 
+    db.autocommit(True)
+
     load_genome_summary(db, input, delim=args.delim, quote=args.quote, skip_header=not args.no_skip_header)
-
-# http://www.regular-expressions.info/floatingpoint.html
-float_restr = r"[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?"
-int_restr = "[-+]?(?:0|[1-9][0-9]*)"
-
-def attr_restr(value_restr):
-    return "(?P<attr>{attr_restr})(?:=(?P<value>{value_restr}))?".format(attr_str=r"[a-zA-Z]+", value_restr=value_restr)
-
-def anchor(restr):
-    return "^" + restr + "$"
-
-float_re = re.compile(anchor(float_restr))
-int_re = re.compile(anchor(int_restr))
-
-def info_attrs(info):
-    attrs_by_type = {
-        str: [],
-        int: [],
-        float: [],
-        bool: [],
-    }
-    def parse_attr(attr):
-        attr_value = attr.split('=')
-        attr = attr_value[0]
-        result = None
-        if len(attr_value) == 2:
-            value = attr_value[1]
-            result = int_re.match(value)
-            if result is not None:
-                return (attr, int(value))
-            result = float_re.match(value)
-            if result is not None:
-                return (attr, float(value))
-            # return a str
-            return (attr, value)
-            # raise RuntimeError("failed to parse info field {attr}".format(attr=attr))
-        else:
-            return (attr, True)
-    for attr_str in info.split(';'):
-        attr_pair = parse_attr(attr_str)  
-        attrs_by_type[type(attr_pair[1])].append(attr_pair)
-    return attrs_by_type
 
 def load_genome_summary(db, input, delim=",", quote='"', skip_header=True):
     cursor = db.cursor()
@@ -116,8 +81,8 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True):
         # TODO: get autoincrement using last_insert_id: http://stackoverflow.com/questions/2548493/in-python-after-i-insert-into-mysqldb-how-do-i-get-the-id
         vc_id = cursor.lastrowid
 
-        # TODO: based on types returned by info_attrs, insert each attr into the right table
-        for attr_type, attrs in info_attrs(row[47 - 1]).iteritems():
+        # TODO: based on types returned by parse_info, insert each attr into the right table
+        for attr_type, attrs in vcf.parse_info(row[47 - 1]).iteritems():
             attr_table = type_to_attr_table[attr_type]  
             for attr, value in attrs:
                 cursor.execute("""
