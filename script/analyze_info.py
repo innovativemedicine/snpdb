@@ -33,7 +33,6 @@ def main():
     field_count = collections.defaultdict(InfoField)
     n = 0
     for row in input:
-        print row
         for attr in row[args.info-1].split(r";"):
             (name, value) = vcf.parse_info_attr(attr)
             attr_type = type(value)
