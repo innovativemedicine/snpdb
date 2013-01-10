@@ -1,3 +1,21 @@
+-- Schema description:
+--
+-- tables:
+--     vc
+--     vc_group
+--     vc_group_info
+--     vc_group_info_allele
+--     vc_group_allele
+--     vc_group_genotype
+--     annovar
+--
+-- We separate a group of variant calls (vc_group) from the variant calls themselves (vc) (i.e. not 
+-- denormalized across that relationship), and permit a variant call to belong to multiple 
+-- groups (in case this happens in the future).  vc_group is split into vc_group and vc_group_info, 
+-- in case vcf files in the future use a different set of fields (in which case one would add a new 
+-- vc_group_info table). The vc_group_info_allele, vc_group_allele, and vc_group_genotype tables 
+-- are needed since denormalization would force us to store numerial fields as string values. 
+
 -- - maxlen's calculated from PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv
 -- - regex constraints are a best guess/approximation based on http://www.1000genomes.org/node/101
 

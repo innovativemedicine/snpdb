@@ -73,3 +73,16 @@ def parse_info(info):
         attr_pair = parse_info_attr(attr_str)  
         attrs_by_type[type(attr_pair[1])].append(attr_pair)
     return attrs_by_type
+
+def ordered_alleles(ref, alts):
+    if type(alts) == str:
+        alts = alts.split(',')
+    genotypes = []
+    alleles = []
+    last_alleles = [ref]
+    last_alleles.extend(alts)
+    for x in last_alleles:
+        alleles.append(x)
+        for y in alleles:
+            genotypes.append((y, x))
+    return genotypes
