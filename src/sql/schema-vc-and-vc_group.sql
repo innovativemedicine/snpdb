@@ -101,7 +101,7 @@ create table vc (
     -- GQ:
     -- conditional genotype quality, encoded as a phred quality -10log_10p(genotype call is wrong, 
     -- conditioned on the site's being variant) (Integer)
-    genotype_quality float,
+    genotype_quality integer,
     -- HQ: haplotype qualities, two phred qualities comma separated (Numeric)
     haplotype_quality1 float,
     haplotype_quality2 float,
