@@ -8,13 +8,13 @@ export PYTHON
 
 .PHONY: all testparse
 
-all: src/python/vcf/parser.py
+all: src/python/vcf/vcfparser.py
 
-src/python/vcf/parser.py: src/python/vcf/parser.g
+src/python/vcf/vcfparser.py: src/python/vcf/vcfparser.g
 	$(3RDPARTY_SCRIPTS)/yapps2.py $<
 	chmod +x $@
 
-testparse: src/python/vcf/parser.py
+testparse: src/python/vcf/vcfparser.py
 	$(TESTS)/testparse.sh
 
 # documentation, maybe use this later

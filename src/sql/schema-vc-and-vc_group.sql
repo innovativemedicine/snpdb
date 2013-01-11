@@ -76,17 +76,10 @@ create table vc (
     -- DP:
     -- read depth at this position for this sample (Integer)
     read_depth integer,
-    -- FT:
-    -- sample genotype filter indicating if this genotype was “called” (similar in concept to the 
-    -- FILTER field). Again, use PASS to indicate that all filters have been passed, a semi-colon 
-    -- separated list of codes for filters that fail, or ”.” to indicate that filters have not been 
-    -- applied. These values should be described in the meta-information in the same way as FILTERs 
-    -- (String, no white-space or semi-colons permitted)
-    genotype_filter varchar(60),
 
     -- Deprecated 4.0 vcf specifications
 
-    -- GL:
+    -- GL (deprecated 4.0 specification):
     -- three floating point log10-scaled likelihoods for AA,AB,BB genotypes where A=ref and B=alt; 
     -- not applicable if site is not biallelic. For example: GT:GL 0/1:-323.03,-99.29,-802.53 
     -- (Numeric)
@@ -102,13 +95,25 @@ create table vc (
     -- conditional genotype quality, encoded as a phred quality -10log_10p(genotype call is wrong, 
     -- conditioned on the site's being variant) (Integer)
     genotype_quality integer,
-    -- HQ: haplotype qualities, two phred qualities comma separated (Numeric)
-    haplotype_quality1 float,
-    haplotype_quality2 float,
 
-    -- vcf 4.1 fields
+    -- vcf fields to be added later when needed
 
-    -- vcf 4.1 fields to be added later when needed
+    -- vcf 4.0
+
+    -- HQ: 
+    -- haplotype qualities, two phred qualities comma separated (Numeric)
+    -- haplotype_quality1 float,
+    -- haplotype_quality2 float,
+
+    -- vcf 4.1
+
+    -- FT:
+    -- sample genotype filter indicating if this genotype was “called” (similar in concept to the 
+    -- FILTER field). Again, use PASS to indicate that all filters have been passed, a semi-colon 
+    -- separated list of codes for filters that fail, or ”.” to indicate that filters have not been 
+    -- applied. These values should be described in the meta-information in the same way as FILTERs 
+    -- (String, no white-space or semi-colons permitted)
+    -- genotype_filter varchar(60),
 
     -- GLE:
     -- genotype likelihoods of heterogeneous ploidy, used in presence of uncertain copy number. For 

@@ -1,5 +1,22 @@
 # http://www.regular-expressions.info/floatingpoint.html
+import vcfparser
 import re
+import yapps
+
+# same as the default parse function generated in vcfparser.py, but also re-raises the exception
+def parse(rule, text): 
+    parser = vcfparser.VCF(vcfparser.VCFScanner(text))
+    def _wrap_error_reporter(rule, *args,**kw):
+        try:
+            return getattr(parser, rule)(*args,**kw)
+        except yapps.runtime.SyntaxError, e:
+            yapps.runtime.print_error(e, parser._scanner)
+            raise e
+        except yapps.runtime.NoMoreTokens, e:
+            print >>sys.stderr, 'Could not complete parsing; stopped around here:'
+            print >>sys.stderr, parser._scanner
+            raise e
+    return _wrap_error_reporter(rule)
 
 float_restr = r"[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?"
 int_restr = "[-+]?(?:0|[1-9][0-9]*)"

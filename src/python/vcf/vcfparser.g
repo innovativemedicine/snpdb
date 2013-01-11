@@ -6,6 +6,7 @@ parser VCF:
     token SEMICOLON: r";"
     token EQUALS: r"="
     token SLASH: r"/"
+    token BAR: r"\|"
     token DOT: r"\."
     token INT: r"[-+]?(?:0|[1-9][0-9]*)"
     token FLOAT: r"[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?"
@@ -20,8 +21,7 @@ parser VCF:
     # (e.g. 0/0:22,2,1:25:59:0,60,715,59,684,681)
     # format is GT:AD:DP:GQ:PL for PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv
 
-    rule genotype: 
-        (
+    rule genotype: (
         DOT {{ allele1 = DOT }} SLASH DOT {{ allele2 = DOT }} {{ return (allele1, allele2) }} |
         GT
         COLON AD
@@ -29,18 +29,23 @@ parser VCF:
         COLON GQ
         COLON PL
         {{ return { 'GT':GT, 'AD':AD, 'DP':DP, 'GQ':GQ, 'PL':PL } }}
-        )
+    ) END
 
     rule genotype_format_field: IDENTIFIER {{ return IDENTIFIER }} 
 
-    rule genotype_format:
+    rule genotype_format: (
         {{ e = [] }}
         genotype_format_field {{ e.append(genotype_format_field) }}
         ( COLON genotype_format_field {{ e.append(genotype_format_field) }} ) *
         {{ return e }}
+    ) END
 
     rule GT: 
-        integer {{ allele1 = integer }} SLASH integer {{ allele2 = integer }} {{ return (allele1, allele2) }}
+        integer {{ allele1 = integer }} phased integer {{ allele2 = integer }} {{ return ((allele1, allele2), phased) }}
+    rule phased:
+        SLASH {{ return False }}
+        | BAR {{ return True }}
+
 
     rule AD: int_list {{ return int_list }}
     rule DP: integer {{ return integer }}
@@ -49,13 +54,14 @@ parser VCF:
 
     # INFO field
 
-    rule info_list:
+    rule info: (
         {{ e = {} }}
-        info {{ e[info[0]] = info[1] }}
-        ( SEMICOLON info {{ e[info[0]] = info[1] }} ) *
+        one_info {{ e[one_info[0]] = one_info[1] }}
+        ( SEMICOLON one_info {{ e[one_info[0]] = one_info[1] }} ) *
         {{ return e }}
+    ) END
 
-    rule info:
+    rule one_info:
         genotype_format_field {{ value = True }}
         ( EQUALS info_value {{ value = info_value }} )?
         {{ return (genotype_format_field, value) }}
@@ -67,16 +73,20 @@ parser VCF:
 
     # REF and ALTS fields
 
-    rule ref: allele {{ return allele }}
+    rule ref:  (
+        allele {{ return allele }}
+    ) END
 
-    rule alts: 
+    rule alts:  (
         {{ e = [] }}
         allele {{ e.append(allele) }}
         ( COMMA allele {{ e.append(allele) }} ) *
         {{ return e }}
+    ) END
 
-    rule allele:
-        DOT {{ return DOT }} | NUCLEOTIDES {{ return NUCLEOTIDES }}
+    rule allele: (
+        null {{ return null }} | NUCLEOTIDES {{ return NUCLEOTIDES }}
+    ) END
 
     # rule list: 
     #     {{ e = [] }}
@@ -88,6 +98,7 @@ parser VCF:
 
     rule integer: INT {{ return int(INT) }}
     rule floating: FLOAT {{ return float(FLOAT) }}
+    rule null: DOT {{ return None }}
 
     # NOTE: tokens are parsed in the order in which they are defined, not the order in which they 
     # appear in this rule 
