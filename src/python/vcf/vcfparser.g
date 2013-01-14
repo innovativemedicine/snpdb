@@ -17,6 +17,11 @@ parser VCF:
 
     token INFO_STR: r"[^,;\n]+"
 
+    rule dbsnp_id: (
+        null
+        | STR {{ return STR }}
+    ) END
+
     # Genotype field 
     # (e.g. 0/0:22,2,1:25:59:0,60,715,59,684,681)
     # format is GT:AD:DP:GQ:PL for PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv

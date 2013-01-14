@@ -3,6 +3,7 @@ import argparsers
 import vcf
 import sql
 
+import sys
 import MySQLdb
 import csv
 import fileinput
@@ -45,7 +46,7 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
     def insert(table, dic):
         if not dry_run:
             return table.insert(dic=dic)
-        # print dic
+        print "insert into {table} {dic}".format(table=table.name, dic=dic)
 
     c = db.cursor()
 
@@ -56,28 +57,79 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
         except StopIteration:
             # empty input
             pass
-    vc_table = sql.Table('vc', cursor=c)
-    annovar_table = sql.Table('annovar', cursor=c)
+
+    vc_group_table          = sql.Table('vc_group', cursor=c)              
+    vc_group_allele_table   = sql.Table('vc_group_allele', cursor=c)       
+    vc_group_genotype_table = sql.Table('vc_group_genotype', cursor=c)     
+    vc_table                = sql.Table('vc', cursor=c)                    
+
     pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
-    # if records is not None:
-    #     print records
     for row in csv_input:
-        # print input.lineno()
         if pbar is not None:
             pbar.update(input.lineno())
 
         row = [None if f == '' else f for f in row] 
 
-        # TODO: insert vc record
+        info = vcf.parse('info', row[47 - 1])
+        vc_group_columns = {
+            'genotype_format' : row[48 - 1],
+            'quality'         : row[45 - 1],
+            'filter'          : row[46 - 1],
+
+            # annovar columns
+            'otherinfo'               : row[27 - 1],
+            'func'                    : row[1 - 1],
+            'gene'                    : row[2 - 1],
+            'exonicfunc'              : row[3 - 1],
+            'aachange'                : row[4 - 1],
+            'conserved'               : row[5 - 1],
+            '1000g2011may_all'        : row[8 - 1],
+            'dbsnp135'                : row[9 - 1],
+            'ljb_phylop_pred'         : row[12 - 1],
+            'ljb_sift_pred'           : row[14 - 1],
+            'ljb_polyphen2_pred'      : row[16 - 1],
+            'ljb_lrt_pred'            : row[18 - 1],
+            'ljb_mutationtaster_pred' : row[20 - 1],
+
+            'ljb_gerppp'              : row[21 - 1],
+            'segdup'                  : row[6 - 1],
+            'esp5400_all'             : row[7 - 1],
+            'avsift'                  : row[10 - 1],
+            'ljb_phylop'              : row[11 - 1],
+            'ljb_sift'                : row[13 - 1],
+            'ljb_polyphen2'           : row[15 - 1],
+            'ljb_lrt'                 : row[17 - 1],
+            'ljb_mutationtaster'      : row[19 - 1],
+
+            # vc_group_info columns
+            # 'info_source'       : row[48 - 1],
+            'ds'                : info.get('DS', False),
+            'inbreeding_coeff'  : info.get('InbreedingCoeff'),
+            'base_q_rank_sum'   : info.get('BaseQRankSum'),
+            'mq_rank_sum'       : info.get('MQRankSum'),
+            'read_pos_rank_sum' : info.get('ReadPosRankSum'),
+            'dels'              : info.get('Dels'),
+            'fs'                : info.get('FS'),
+            'haplotype_score'   : info.get('HaplotypeScore'),
+            'mq'                : info.get('MQ'),
+            'qd'                : info.get('QD'),
+            'sb'                : info.get('SB'),
+            'vqslod'            : info.get('VQSLOD'),
+            'an'                : info.get('AN'),
+            'dp'                : info.get('DP'),
+            'mq0'               : info.get('MQ0'),
+            'culprit'           : info.get('culprit'),
+        }
+        insert(vc_group_table, vc_group_columns)
+
         vc_columns = {
-            'dbsnp_id'   : row[42 - 1],
-            'chromosome' : row[22 - 1],
-            'start_posn' : row[23 - 1],
-            'end_posn'   : row[24 - 1],
-            'ref'        : vcf.parse('ref', row[25 - 1]),
-            'quality'    : row[45 - 1],
-            'filter'     : row[46 - 1],
-            'zygosity'   : row[39 - 1],
+            'vc_group_id' : vc_group_table.lastrowid,
+            'chromosome'  : row[22 - 1],
+            'start_posn'  : row[23 - 1],
+            'end_posn'    : row[24 - 1],
+            'ref'         : vcf.parse('ref', row[25 - 1]),
+            'dbsnp_id'    : vcf.parse('dbsnp_id', row[42 - 1]),
+            'zygosity'    : row[39 - 1],
         }
 
         alts = vcf.parse('alts', row[44 - 1])
@@ -88,89 +140,61 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
         genotypes = [vcf.parse('genotype', row[gf]) for gf in genotype_fields]
 
         for gf in genotype_fields:
-            vc_columns['genotype_source'] = row[gf]
-            # TODO: parse genotype column, 
+            # vc_columns['genotype_source'] = row[gf]
             genotype = genotypes[last_gf-gf]
+
+            vc_group_genotype_columns = {
+                'vc_group_id'      : vc_group_table.lastrowid,
+            }
+
             if genotype != ('.', '.'):
-                ((allele1_idx, allele2_idx), vc_columns['phased']) = genotype['GT'] 
+                ((allele1_idx, allele2_idx), vc_columns['phased']) = genotype.get('GT') 
                 vc_columns['allele1'] = ref_and_alts[allele1_idx]
                 vc_columns['allele2'] = ref_and_alts[allele2_idx]
-                vc_columns['read_depth'] = genotype['DP']
-                vc_columns['genotype_quality'] = genotype['GQ']
+                vc_columns['read_depth'] = genotype.get('DP')
+                vc_columns['genotype_quality'] = genotype.get('GQ')
+                vc_group_genotype_columns['allele1'] = vc_columns.get('allele1'),
+                vc_group_genotype_columns['allele2'] = vc_columns.get('allele2'),
+                vc_group_genotype_columns['phred_likelihood'] = genotype.get('PL'),
+                alleles = filter(lambda x: x is not None, [vc_columns.get('allele1'), vc_columns.get('allele2')])
+                allele_fields = [
+                    alleles,
+                    # vc_group_allele
+                    get_list(genotype, 'AD'),
+                    # vc_group_allele_info
+                    get_list(info, 'AF'),
+                    get_list(info, 'MLEAF'),
+                    get_list(info, 'AC'),
+                    get_list(info, 'MLEAC'),
+                ]
+                if not all(len(f) == len(alleles) for f in allele_fields):
+                    print >> sys.stderr, "Number of vc_group_allele / vc_group_allele_info columns don't all match the number of alleles; skipping insertion into vc_group_allele / vc_group_allele_info".format(lineno=input.lineno())
+                else:
+                    for allele, allelic_depth, af, mle_af, ac, mle_ac in zip(*allele_fields):
+                        vc_group_allele_columns = {
+                            'vc_group_id'   : vc_group_table.lastrowid,
+                            'allele'        : allele,
+                            'allelic_depth' : allelic_depth,
+
+                            # vc_group_allele_info columns
+                            'allele'      : allele,
+                            'af'          : af,
+                            'mle_af'      : mle_af,
+                            'ac'          : ac,
+                            'mle_ac'      : mle_ac,
+                        }
+                        insert(vc_group_allele_table, vc_group_allele_columns)
+            insert(vc_group_genotype_table, vc_group_genotype_columns)
             insert(vc_table, vc_columns)
-
-            # TODO: extract vc_group_genotype fields and insert
-            # TODO: extract vc_group_allele fields and insert
-            # TODO: for each allele specific field, insert into vc_group_allele parse genotype column
-
-        # allele1 = 
-
-        # TODO: extract fields from genotype for vc_group, then insert 
-        vc_group_columns = {
-            'genotype_format' : row[48 - 1],
-            'vc_id' : vc_table.lastrowid,
-        }
-
-        # TODO: parse info field
-        # TODO: extract vc_group_info fields and insert
-        
-        # ref = ...
-        # alts = ...
-        # for alt in alts:
-            # TODO: extract vc_group_allele fields and insert
-            # TODO: extract vc_group_info_allele fields and insert
-
-        # vc_id = c.lastrowid
-
-        # annovar_table.insert(dic={
-        #     'vc_id'                   : vc_id,
-
-        #     'otherinfo'               : row[27 - 1],
-        #     'func'                    : row[1 - 1],
-        #     'gene'                    : row[2 - 1],
-        #     'exonicfunc'              : row[3 - 1],
-        #     'aachange'                : row[4 - 1],
-        #     'conserved'               : row[5 - 1],
-        #     '1000g2011may_all'        : row[8 - 1],
-        #     'dbsnp135'                : row[9 - 1],
-        #     'ljb_phylop_pred'         : row[12 - 1],
-        #     'ljb_sift_pred'           : row[14 - 1],
-        #     'ljb_polyphen2_pred'      : row[16 - 1],
-        #     'ljb_lrt_pred'            : row[18 - 1],
-        #     'ljb_mutationtaster_pred' : row[20 - 1],
-
-        #     'ljb_gerppp'              : row[21 - 1],
-        #     'segdup'                  : row[6 - 1],
-        #     'esp5400_all'             : row[7 - 1],
-        #     'avsift'                  : row[10 - 1],
-        #     'ljb_phylop'              : row[11 - 1],
-        #     'ljb_sift'                : row[13 - 1],
-        #     'ljb_polyphen2'           : row[15 - 1],
-        #     'ljb_lrt'                 : row[17 - 1],
-        #     'ljb_mutationtaster'      : row[19 - 1],
-
-        #     'zygosity'                : row[39 - 1],
-        #     'genotype_format'         : row[48 - 1],
-
-        #     'genotype1'               : row[49 - 1],
-        #     'genotype2'               : row[50 - 1],
-        #     'genotype3'               : row[51 - 1],
-        #     'genotype4'               : row[52 - 1],
-        #     'genotype5'               : row[53 - 1],
-        #     'genotype6'               : row[54 - 1],
-        #     'genotype7'               : row[55 - 1],
-        #     'genotype8'               : row[56 - 1],
-        #     'genotype9'               : row[57 - 1],
-        #     'genotype10'              : row[58 - 1],
-        #     'genotype11'              : row[59 - 1],
-        #     'genotype12'              : row[60 - 1],
-        # })
     pbar.finish()
     db.commit()
     c.close()
 
 def as_list(x):
     return [x] if type(x) != list else x
+
+def get_list(dic, attr):
+    return as_list(dic.get(attr, []))
 
 def file_len(fname):
     with open(fname) as f:
