@@ -9,12 +9,15 @@
 --     vc_group_genotype
 --     annovar
 --
+
 -- We separate a group of variant calls (vc_group) from the variant calls themselves (vc) (i.e. not 
--- denormalized across that relationship), and permit a variant call to belong to multiple 
--- groups (in case this happens in the future).  vc_group is split into vc_group and vc_group_info, 
--- in case vcf files in the future use a different set of fields (in which case one would add a new 
--- vc_group_info table). The vc_group_info_allele, vc_group_allele, and vc_group_genotype tables 
--- are needed since denormalization would force us to store numerial fields as string values. 
+-- denormalized across that relationship), and permit a variant call to belong to a single group 
+-- (if a variant call belongs to multiple groups in the future, we'll need to change vc_group table 
+-- into a many-to-many table establishing relationships between vc_id's and vc_group_id's).  
+-- vc_group is split into vc_group and vc_group_info, in case vcf files in the future use a 
+-- different set of fields (in which case one would add a new vc_group_info table). The 
+-- vc_group_info_allele, vc_group_allele, and vc_group_genotype tables are needed since 
+-- denormalization would force us to store numerial fields as string values. 
 
 -- - maxlen's calculated from PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv
 -- - regex constraints are a best guess/approximation based on http://www.1000genomes.org/node/101
@@ -25,6 +28,7 @@
 -- patient x variant_site x variant
 create table vc (
     id bigint not null auto_increment,
+    vc_group_id bigint not null,
 
     -- variant
     
@@ -151,8 +155,20 @@ create table vc (
     -- unlabelled fields that I've tried to figure out
     zygosity varchar(100), -- field #39
 
+    -- annovar
     index (chromosome, start_posn, end_posn, ref, allele1),
+    -- annovar
     index (chromosome, start_posn, end_posn, ref, allele2),
+    -- vc_group doesn't contain anything that useful yet; we can skip joining it when joining vc_group_info
+    -- index (vc_group_id),
+    -- vc_group_info
+    index (id, vc_group_id),
+    -- vc_group_allele, vc_group_info_allele
+    index (vc_group_id, allele1),
+    -- vc_group_allele, vc_group_info_allele
+    index (vc_group_id, allele2),
+    -- vc_group_genotype
+    index (vc_group_id, allele1, allele2),
     primary key(id)
 ) ENGINE=NDB;
 
@@ -160,11 +176,7 @@ create table vc (
 -- (i.e. primary key is set of patient_id, chr, pos, group_id) (assume only ever 1 run)
 create table vc_group (
     id bigint not null auto_increment,
-    -- we want to refer to vc, to allow for the possibility in the future of a patient being part of multiple "groups"
-    vc_id bigint not null,
     genotype_format varchar(256), -- field #48
-    -- alts varchar(200), -- field #44, looks like alt for single character, but can be comma separated...
-    index (vc_id, id),
     primary key (id)
 ) ENGINE=NDB;
 
@@ -177,8 +189,6 @@ create table vc_group (
 -- patient x variant_site x group
 create table vc_group_info (
     vc_group_id bigint not null,
-    -- we want to refer to vc, to allow for the possibility in the future of a patient being part of multiple "groups"
-    vc_id bigint not null,
 
     -- maybe useful to retain fields that aren't defined in this table... but in that case one 
     -- should consider adding a new vc_group_info_* table, or add desired fields to an existing 
@@ -242,8 +252,7 @@ create table vc_group_info (
     -- maxlen == 15
     culprit varchar(30),
 
-    primary key (vc_group_id),
-    index (vc_id, vc_group_id)
+    primary key (vc_group_id)
 ) ENGINE=NDB;
 
 -- patient x variant_site x group x variant x allele
@@ -275,9 +284,6 @@ create table vc_group_info_allele (
 -- patient x variant_site x group x allele
 -- (i.e. primary key is set of patient_id, chr, pos, group_id, allele) (assume only ever 1 run)
 create table vc_group_allele (
-    -- id bigint not null auto_increment,
-    vc_id bigint not null,
-    -- allow for the possibility in the future of a patient being part of multiple "groups"
     vc_group_id bigint not null,
     allele varchar(200),
 
@@ -286,14 +292,12 @@ create table vc_group_allele (
     -- AD (from vcf Project_PBC.121113.recal.filtered.snps.vcf):
     -- ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
     allelic_depth integer,
-    primary key (vc_id, vc_group_id, allele)
+    primary key (vc_group_id, allele)
 ) ENGINE=NDB;
 
 -- patient x variant_site x group x genotype (= allele x allele)
 -- (i.e. primary key is set of patient_id, chr, pos, group_id, allele1, allele2) (assume only ever 1 run)
 create table vc_group_genotype (
-    vc_id bigint not null,
-    -- allow for the possibility in the future of a patient being part of multiple "groups"
     vc_group_id bigint not null,
     allele1 varchar(200),
     allele2 varchar(200),
@@ -317,7 +321,7 @@ create table vc_group_genotype (
     -- AA,AB,BB,AC,BC,CC, etc.  For example: GT:GL 0/1:-323.03,-99.29,-802.53 (Floats)
     -- genotype_likelihood float,
 
-    primary key (vc_id, vc_group_id, allele1, allele2)
+    primary key (vc_group_id, allele1, allele2)
 ) ENGINE=NDB;
 
 -- annotations generated by the annovar tool (i.e. fields 1-27).  According to http://www.openbioinformatics.org/annovar/annovar_input.html:
