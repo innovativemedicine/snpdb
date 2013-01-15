@@ -45,8 +45,19 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
 
     def insert(table, dic):
         if not dry_run:
-            return table.insert(dic=dic)
+            try:
+                return table.insert(dic=dic)
+            except Exception as e:
+                msg = e.message if e.message else e.__str__()
+                raise type(e)(msg + " at line {lineno}".format(lineno=input.lineno()))
         print "insert into {table} {dic}".format(table=table.name, dic=dic)
+
+    def arity_zip(args, error=None, table=None, key=None):
+        if error is None:
+            error = "Number of {table} columns don't all match the number of {key}; " + \
+                    "skipping insertion into {table} at line {lineno}"
+        return check_arity_zip(args, error.format(lineno=input.lineno(), table=table.name, key=key))
+
 
     c = db.cursor()
 
@@ -60,10 +71,12 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
 
     vc_group_table          = sql.Table('vc_group', cursor=c)              
     vc_group_allele_table   = sql.Table('vc_group_allele', cursor=c)       
-    vc_group_genotype_table = sql.Table('vc_group_genotype', cursor=c)     
+    vc_genotype_table = sql.Table('vc_genotype', cursor=c)     
     vc_table                = sql.Table('vc', cursor=c)                    
+    vc_allele_table                = sql.Table('vc_allele', cursor=c)                    
 
     pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
+    # for each vc_group
     for row in csv_input:
         if pbar is not None:
             pbar.update(input.lineno())
@@ -72,7 +85,7 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
 
         info = vcf.parse('info', row[47 - 1])
         vc_group_columns = {
-            'genotype_format' : row[48 - 1],
+            # 'genotype_format' : row[48 - 1],
             'quality'         : row[45 - 1],
             'filter'          : row[46 - 1],
 
@@ -122,6 +135,29 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
         }
         insert(vc_group_table, vc_group_columns)
 
+        alts = vcf.parse('alts', row[44 - 1])
+
+        # for each vc_group_allele in (vc x alt alleles in vc_group)
+        vc_group_allele_fields = [
+            alts,
+            # vc_group_allele_info
+            get_list(info, 'AF'),
+            get_list(info, 'MLEAF'),
+            get_list(info, 'AC'),
+            get_list(info, 'MLEAC'),
+        ]
+        for allele, af, mle_af, ac, mle_ac in arity_zip(vc_group_allele_fields, table=vc_group_table, key="alt alleles in vc_group"):
+            vc_group_allele_columns = {
+                'vc_group_id'   : vc_group_table.lastrowid,
+                'allele'        : allele,
+                # vc_group_allele_info columns
+                'af'          : af,
+                'mle_af'      : mle_af,
+                'ac'          : ac,
+                'mle_ac'      : mle_ac,
+            }
+            insert(vc_group_allele_table, vc_group_allele_columns)
+
         vc_columns = {
             'vc_group_id' : vc_group_table.lastrowid,
             'chromosome'  : row[22 - 1],
@@ -132,60 +168,47 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
             'zygosity'    : row[39 - 1],
         }
 
-        alts = vcf.parse('alts', row[44 - 1])
         ref_and_alts = as_list(vc_columns['ref']) + alts
-        first_gf = 49 - 1
-        last_gf = 60 - 1
-        genotype_fields = xrange(first_gf, last_gf + 1)
-        genotypes = [vcf.parse('genotype', row[gf]) for gf in genotype_fields]
 
-        for gf in genotype_fields:
+        # for each vc in vc_group
+        for genotype in [vcf.parse('genotype', row[gf]) for gf in xrange(49 - 1, 60)]:
             # vc_columns['genotype_source'] = row[gf]
-            genotype = genotypes[last_gf-gf]
-
-            vc_group_genotype_columns = {
-                'vc_group_id'      : vc_group_table.lastrowid,
-            }
 
             if genotype != ('.', '.'):
-                ((allele1_idx, allele2_idx), vc_columns['phased']) = genotype.get('GT') 
+                ((allele1_idx, allele2_idx), vc_columns['phased']) = genotype['GT'] 
                 vc_columns['allele1'] = ref_and_alts[allele1_idx]
                 vc_columns['allele2'] = ref_and_alts[allele2_idx]
                 vc_columns['read_depth'] = genotype.get('DP')
                 vc_columns['genotype_quality'] = genotype.get('GQ')
-                vc_group_genotype_columns['allele1'] = vc_columns.get('allele1'),
-                vc_group_genotype_columns['allele2'] = vc_columns.get('allele2'),
-                vc_group_genotype_columns['phred_likelihood'] = genotype.get('PL'),
-                alleles = filter(lambda x: x is not None, [vc_columns.get('allele1'), vc_columns.get('allele2')])
-                allele_fields = [
-                    alleles,
-                    # vc_group_allele
-                    get_list(genotype, 'AD'),
-                    # vc_group_allele_info
-                    get_list(info, 'AF'),
-                    get_list(info, 'MLEAF'),
-                    get_list(info, 'AC'),
-                    get_list(info, 'MLEAC'),
+                insert(vc_table, vc_columns)
+                
+                # for each vc_genotype in (alleles in vc_group x alleles in vc_group x vc)
+                vc_genotype_fields = [
+                    vcf.ordered_alleles(vc_columns['ref'], alts), 
+                    as_list(genotype.get('PL')),
                 ]
-                if not all(len(f) == len(alleles) for f in allele_fields):
-                    print >> sys.stderr, "Number of vc_group_allele / vc_group_allele_info columns don't all match the number of alleles; skipping insertion into vc_group_allele / vc_group_allele_info".format(lineno=input.lineno())
-                else:
-                    for allele, allelic_depth, af, mle_af, ac, mle_ac in zip(*allele_fields):
-                        vc_group_allele_columns = {
-                            'vc_group_id'   : vc_group_table.lastrowid,
-                            'allele'        : allele,
-                            'allelic_depth' : allelic_depth,
+                for (vc_genotype_allele1, vc_genotype_allele2), phred_likelihood in arity_zip(vc_genotype_fields, table=vc_genotype_table, key="biallelic genotypes in vc_group"):
+                    vc_genotype_columns = {
+                        'vc_id'            : vc_table.lastrowid,
+                        'allele1'          : vc_genotype_allele1,
+                        'allele2'          : vc_genotype_allele2,
+                        'phred_likelihood' : phred_likelihood,
+                    }
+                    insert(vc_genotype_table, vc_genotype_columns)
 
-                            # vc_group_allele_info columns
-                            'allele'      : allele,
-                            'af'          : af,
-                            'mle_af'      : mle_af,
-                            'ac'          : ac,
-                            'mle_ac'      : mle_ac,
-                        }
-                        insert(vc_group_allele_table, vc_group_allele_columns)
-            insert(vc_group_genotype_table, vc_group_genotype_columns)
-            insert(vc_table, vc_columns)
+                # for each vc_allele in (vc x alleles in ref, alts)
+                vc_allele_fields = [
+                    ref_and_alts,
+                    get_list(genotype, 'AD'),
+                ]
+                for allele, allelic_depth in arity_zip(vc_allele_fields, table=vc_allele_table, key="ref and alt alleles in vc_group"):
+                    vc_allele_columns = {
+                        'vc_id'         : vc_table.lastrowid,
+                        'allele'        : allele,
+                        'allelic_depth' : allelic_depth,
+                    }
+                    insert(vc_allele_table, vc_allele_columns)
+
     pbar.finish()
     db.commit()
     c.close()
@@ -195,6 +218,13 @@ def as_list(x):
 
 def get_list(dic, attr):
     return as_list(dic.get(attr, []))
+
+def check_arity_zip(args, error=None):
+    if not all(len(f) == len(args[0]) for f in args):
+        if error is not None:
+            print >> sys.stderr, error
+        return []
+    return zip(*args)
 
 def file_len(fname):
     with open(fname) as f:

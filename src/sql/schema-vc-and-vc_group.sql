@@ -2,15 +2,16 @@
 --
 -- tables:
 --     vc
+--     vc_genotype
+--     vc_allele
 --     vc_group
 --     vc_group_allele
---     vc_group_genotype
 --
 -- We separate a group of variant calls (vc_group) from the variant calls themselves (vc) (i.e. not 
 -- denormalized across that relationship), and permit a variant call to belong to a single group 
 -- (if a variant call belongs to multiple groups in the future, we'll need to change vc_group table 
 -- into a many-to-many table establishing relationships between vc_id's and vc_group_id's).  The 
--- vc_group_allele, and vc_group_genotype tables are needed since denormalization would force us to 
+-- vc_group_allele, and vc_genotype tables are needed since denormalization would force us to 
 -- store numerial fields as string values. 
 
 -- - maxlen's calculated from PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv
@@ -20,7 +21,7 @@
 -- (i.e. primary key is set of patient_id, chr, pos, group_id) (assume only ever 1 run)
 create table vc_group (
     id bigint not null auto_increment,
-    genotype_format varchar(256), -- field #48
+    -- genotype_format varchar(256), -- field #48
     quality double, -- field #45, "traditionally people use integer phred scores, this field is permitted to be a floating point to enable higher resolution for low confidence calls if desired" (not defined in summary file for whatever reason)
     filter varchar(60), -- field #46, maxlen() == 27 "traditionally people use integer phred scores, this field is permitted to be a floating point to enable higher resolution for low confidence calls if desired" (not defined in summary file for whatever reason)
     
@@ -141,12 +142,6 @@ create table vc_group_allele (
     vc_group_id bigint not null,
     allele varchar(200),
 
-    -- vcf 4.1 genotype fields
-
-    -- AD (from vcf Project_PBC.121113.recal.filtered.snps.vcf):
-    -- ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
-    allelic_depth integer,
-
     -- non-standard vcf info fields (from vcf Project_PBC.121113.recal.filtered.snps.vcf)
 
     -- AF:
@@ -166,36 +161,6 @@ create table vc_group_allele (
 
     foreign key (vc_group_id) references vc_group(id),
     primary key (vc_group_id, allele)
-) ENGINE=NDB;
-
--- patient x variant_site x group x genotype (= allele x allele)
--- (i.e. primary key is set of patient_id, chr, pos, group_id, allele1, allele2) (assume only ever 1 run)
-create table vc_group_genotype (
-    vc_group_id bigint not null,
-    allele1 varchar(200),
-    allele2 varchar(200),
-
-    -- vcf 4.1 genotype fields
-
-    -- PL:
-    -- the phred-scaled genotype likelihoods rounded to the closest integer (and otherwise defined 
-    -- precisely as the GL field) (Integers)
-    phred_likelihood integer,
-
-    -- vcf 4.1 genotype fields to be added later when needed
-
-    -- GL:
-    -- genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for 
-    -- all possible genotypes given the set of alleles defined in the REF and ALT fields. In presence of 
-    -- the GT field the same ploidy is expected and the canonical order is used; without GT field, 
-    -- diploidy is assumed. If A is the allele in REF and B,C,... are the alleles as ordered in ALT, the 
-    -- ordering of genotypes for the likelihoods is given by: F(j/k) = (k*(k+1)/2)+j.  In other words, 
-    -- for biallelic sites the ordering is: AA,AB,BB; for triallelic sites the ordering is: 
-    -- AA,AB,BB,AC,BC,CC, etc.  For example: GT:GL 0/1:-323.03,-99.29,-802.53 (Floats)
-    -- genotype_likelihood float,
-
-    foreign key (vc_group_id) references vc_group(id),
-    primary key (vc_group_id, allele1, allele2)
 ) ENGINE=NDB;
 
 -- This is really patient_variant / sample_variant.  A "sample" in this case is synonymous with "a 
@@ -333,13 +298,62 @@ create table vc (
     foreign key (vc_group_id) references vc_group(id),
     -- vc_group_allele
     index (vc_group_id, allele1),
-    foreign key (vc_group_id, allele1) references vc_group_allele(vc_group_id, allele),
+    -- foreign key (vc_group_id, allele1) references vc_group_allele(vc_group_id, allele),
     -- vc_group_allele
     index (vc_group_id, allele2),
-    foreign key (vc_group_id, allele2) references vc_group_allele(vc_group_id, allele),
-    -- vc_group_genotype
-    index (vc_group_id, allele1, allele2),
-    foreign key (vc_group_id, allele1, allele2) references vc_group_genotype(vc_group_id, allele1, allele2),
+    -- foreign key (vc_group_id, allele2) references vc_group_allele(vc_group_id, allele),
+    -- vc_genotype
+    index (id, allele1, allele2),
     primary key(id)
 ) ENGINE=NDB;
 
+-- patient x variant_site x group x allele (where allele is in alleles of group)
+create table vc_allele (
+    vc_id bigint not null,
+    -- if we ever have multiple groups for a vc, we need this
+    -- vc_group_id bigint not null,
+    allele varchar(200),
+
+    -- vcf 4.1 genotype fields
+
+    -- AD (from vcf Project_PBC.121113.recal.filtered.snps.vcf):
+    -- ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
+    allelic_depth integer,
+
+    foreign key (vc_id) references vc(id),
+    -- vc
+    primary key (vc_id, allele)
+) ENGINE=NDB;
+
+-- patient x variant_site x group x genotype (= allele x allele, where allele is in alleles of group)
+-- (i.e. primary key is set of patient_id, chr, pos, group_id, allele1, allele2) (assume only ever 1 run)
+create table vc_genotype (
+    vc_id bigint not null,
+    -- if we ever have multiple groups for a vc, we need this
+    -- vc_group_id bigint not null,
+    allele1 varchar(200),
+    allele2 varchar(200),
+
+    -- vcf 4.1 genotype fields
+
+    -- PL:
+    -- the phred-scaled genotype likelihoods rounded to the closest integer (and otherwise defined 
+    -- precisely as the GL field) (Integers)
+    phred_likelihood integer,
+
+    -- vcf 4.1 genotype fields to be added later when needed
+
+    -- GL:
+    -- genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for 
+    -- all possible genotypes given the set of alleles defined in the REF and ALT fields. In presence of 
+    -- the GT field the same ploidy is expected and the canonical order is used; without GT field, 
+    -- diploidy is assumed. If A is the allele in REF and B,C,... are the alleles as ordered in ALT, the 
+    -- ordering of genotypes for the likelihoods is given by: F(j/k) = (k*(k+1)/2)+j.  In other words, 
+    -- for biallelic sites the ordering is: AA,AB,BB; for triallelic sites the ordering is: 
+    -- AA,AB,BB,AC,BC,CC, etc.  For example: GT:GL 0/1:-323.03,-99.29,-802.53 (Floats)
+    -- genotype_likelihood float,
+
+    foreign key (vc_id) references vc(id),
+    -- vc
+    primary key (vc_id, allele1, allele2)
+) ENGINE=NDB;
