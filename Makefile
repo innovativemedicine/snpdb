@@ -26,9 +26,9 @@ all: src/python/vcf/vcfparser.py
 help:
 	@echo "USAGE:"
 	@echo "clusterdb              create a $(CLUSTERDB_NAME) database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_REMOTE)\""
-	@echo "clusterdb_innodb       create a $(CLUSTERDB_NAME) database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_REMOTE)\" (InnoDB engine)"
+	@echo "clusterdb_innodb       create a $(CLUSTERDB_NAME)_innodb database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_REMOTE)\" (InnoDB engine)"
 	@echo "clusterdb_local        create a $(CLUSTERDB_NAME) database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_LOCAL)\""
-	@echo "clusterdb_local_innodb create a $(CLUSTERDB_NAME) database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_LOCAL)\" (InnoDB engine)"
+	@echo "clusterdb_innodb_local create a $(CLUSTERDB_NAME)_innodb database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_LOCAL)\" (InnoDB engine)"
 
 src/python/vcf/vcfparser.py: src/python/vcf/vcfparser.g
 	$(3RDPARTY_SCRIPTS)/yapps2.py $<
@@ -43,18 +43,18 @@ CLUSTERDB_DEPENDENCIES := $(SCRIPTS)/load_genome_summary.py $(PYTHON_SRC_FILES) 
 
 define MK_CLUSTERDB 
 $(CLUSTERDB_NAME)$(1): $(CLUSTERDB_DEPENDENCIES)
-	MYSQL_CLUSTERDB_OPTS="$(3)" CLUSTERDB_ENGINE="$(2)" $(SCRIPTS)/mk_clusterdb.sh $(2)
-.PHONY: $(CLUSTERDB_NAME)$(1)
+	MYSQL_CLUSTERDB_OPTS="$(4)" CLUSTERDB_ENGINE="$(3)" CLUSTERDB_NAME="$(CLUSTERDB_NAME)$(2)" $(SCRIPTS)/mk_clusterdb.sh $(3)
+.PHONY: $(CLUSTERDB_NAME)$(2)
 endef
 
 # creates clusterdb_local target
-$(eval $(call MK_CLUSTERDB,_local,NDB,$(MYSQL_CLUSTERDB_OPTS_LOCAL)))
+$(eval $(call MK_CLUSTERDB,_local,,NDB,$(MYSQL_CLUSTERDB_OPTS_LOCAL)))
 # creates clusterdb_local_innodb target
-$(eval $(call MK_CLUSTERDB,_local_innodb,InnoDB,$(MYSQL_CLUSTERDB_OPTS_LOCAL)))
+$(eval $(call MK_CLUSTERDB,_innodb_local,_innodb,InnoDB,$(MYSQL_CLUSTERDB_OPTS_LOCAL)))
 # creates clusterdb (remote) target
-$(eval $(call MK_CLUSTERDB,,NDB,$(MYSQL_CLUSTERDB_OPTS_REMOTE)))
+$(eval $(call MK_CLUSTERDB,,,NDB,$(MYSQL_CLUSTERDB_OPTS_REMOTE)))
 # creates clusterdb_innodb (remote) target
-$(eval $(call MK_CLUSTERDB,_innodb,InnoDB,$(MYSQL_CLUSTERDB_OPTS_REMOTE)))
+$(eval $(call MK_CLUSTERDB,_innodb,_innodb,InnoDB,$(MYSQL_CLUSTERDB_OPTS_REMOTE)))
 
 # documentation, maybe use this later
 # include Makefile.sphinx
