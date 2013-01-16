@@ -2,9 +2,7 @@
 ROOT := .
 SCRIPTS := $(ROOT)/script
 TESTS := $(ROOT)/test
-3RDPARTY_SCRIPTS := $(ROOT)/3rdparty/script
 PYTHON := python
-
 export PYTHON ROOT
 
 MYSQL := mysql
@@ -14,14 +12,16 @@ CLUSTERDB_NAME := clusterdb
 CLUSTERDB_FILE := PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv.head.5
 CLUSTERDB_SCHEMA := src/sql/schema-vc-and-vc_group.sql
 CLUSTERDB_ENGINE := NDB
-
+PYTHON_SRC_FILES=$(shell find . -name '*.py' -path "./src/*")
 export MYSQL MYSQL_CLUSTERDB_OPTS_REMOTE MYSQL_CLUSTERDB_OPTS_LOCAL CLUSTERDB_NAME CLUSTERDB_FILE CLUSTERDB_SCHEMA CLUSTERDB_ENGINE
 
-PYTHON_SRC_FILES=$(shell find . -name '*.py' -path "./src/*")
+VCFPARSER = lib/python/pyvcf/src/vcf/vcfparser.py
+VPATH = lib/python/pyvcf
+export VCFPARSER
 
 .PHONY: all testparse
 
-all: src/python/vcf/vcfparser.py
+all: src/vcf/vcfparser.py
 
 help:
 	@echo "USAGE:"
@@ -30,11 +30,7 @@ help:
 	@echo "clusterdb_local        create a $(CLUSTERDB_NAME) database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_LOCAL)\""
 	@echo "clusterdb_innodb_local create a $(CLUSTERDB_NAME)_innodb database using $(SCRIPTS)/mk_clusterdb.sh with connect string \"$(MYSQL_CLUSTERDB_OPTS_LOCAL)\" (InnoDB engine)"
 
-src/python/vcf/vcfparser.py: src/python/vcf/vcfparser.g
-	$(3RDPARTY_SCRIPTS)/yapps2.py $<
-	chmod +x $@
-
-testparse: src/python/vcf/vcfparser.py
+testparse: src/vcf/vcfparser.py
 	$(TESTS)/testparse.sh
 
 # fill clusterdb
@@ -58,3 +54,5 @@ $(eval $(call MK_CLUSTERDB,_innodb,_innodb,InnoDB,$(MYSQL_CLUSTERDB_OPTS_REMOTE)
 
 # documentation, maybe use this later
 # include Makefile.sphinx
+
+include lib/python/pyvcf/vcf.mk
