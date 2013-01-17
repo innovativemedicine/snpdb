@@ -12,10 +12,10 @@ def main():
                     connectstring_var=e[connectstring_var], 
                     engine=' ' + engine if engine is not None else '')
     target_help = {
-        'clusterdb'              : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_REMOTE'),
-        'clusterdb_innodb'       : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_REMOTE', "(InnoDB engine)"),
-        'clusterdb_local'        : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_LOCAL'),
-        'clusterdb_innodb_local' : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_LOCAL', "(InnoDB engine)"),
+        e['CLUSTERDB_NAME']                   : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_REMOTE'),
+        e['CLUSTERDB_NAME'] + '_innodb'       : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_REMOTE', "(InnoDB engine)"),
+        e['CLUSTERDB_NAME'] + '_local'        : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_LOCAL'),
+        e['CLUSTERDB_NAME'] + '_innodb_local' : mk_clusterdb_help('MYSQL_CLUSTERDB_OPTS_LOCAL', "(InnoDB engine)"),
     }
     help_wrapper = textwrap.TextWrapper(width=width, initial_indent="    ", subsequent_indent="    ")
     print 'Useful targets:\n'

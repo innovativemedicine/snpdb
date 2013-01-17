@@ -73,6 +73,7 @@ create table vc_group (
     qd float,
     -- SB
     -- Description: Strand Bias
+    -- NOTE: andrew said this should be per patient, not per group
     sb float,
     -- VQSLOD
     -- Description: Log odds ratio of being a true variant versus being false under the trained gaussian mixture model

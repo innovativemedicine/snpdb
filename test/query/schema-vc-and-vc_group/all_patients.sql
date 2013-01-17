@@ -1,0 +1,1 @@
+-- Query all patients/samples in the database.

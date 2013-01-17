@@ -12,6 +12,8 @@ VCFPARSER = lib/python/pyvcf/src/vcf/vcfparser.py
 VPATH = lib/python/pyvcf
 export VCFPARSER
 
+RENDER = $(SCRIPTS)/render.py
+
 .PHONY: all testparse
 
 all: src/vcf/vcfparser.py
@@ -21,6 +23,19 @@ help:
 
 testparse: src/vcf/vcfparser.py
 	$(TESTS)/testparse.sh
+
+%.out: %
+	$(RENDER) $<
+
+%: %.jinja
+	$(RENDER) $<
+
+# load test
+
+loadtest: $(CLUSTERDB_SCHEMA) $(CLUSTERDB_FILE) $(LOAD_TEST_QUERIES)
+	mysqlslap --query="$(shell $(MAKE_SCRIPTS)/stripsql.sh $(LOAD_TEST_QUERIES))" --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency)
+
+.PHONY: loadtest
 
 # fill clusterdb
 

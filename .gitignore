@@ -1,2 +1,4 @@
 # python
 *.pyc
+# template files
+*.out

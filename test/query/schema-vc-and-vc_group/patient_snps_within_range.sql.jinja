@@ -1,0 +1,9 @@
+-- BASE QUERY: Given a patient, pull out all snps within a chromomsal region / or in a set of genes.
+-- params:
+-- where AD > 20 or DP > 20 (one of those, prob DP)
+-- where SB > num
+-- call any gene that have at least 1 variant that have ad or dp < 20 (they will want to resequence this)
+-- unique gene/exon pair with benign (BEN) or unclassified (UNCL)
+select * from vc, vc_group
+    where vc.read_depth > 20 and
+          vc_group.sb > {{ strand_bias }};

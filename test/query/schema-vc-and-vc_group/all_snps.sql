@@ -1,0 +1,1 @@
+-- Query all the snps in the database.
