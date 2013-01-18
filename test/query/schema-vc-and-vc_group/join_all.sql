@@ -1,2 +1,0 @@
--- Join all the tables together, which is something that would have to be done if say, a user wanted 
--- to output the original vcf file from which data was inserted.

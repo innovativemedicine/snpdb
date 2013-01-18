@@ -24,16 +24,30 @@ help:
 testparse: src/vcf/vcfparser.py
 	$(TESTS)/testparse.sh
 
-%.out: %
+%.out: % config.mk
 	$(RENDER) $<
 
-%: %.jinja
+%: %.jinja config.mk
 	$(RENDER) $<
+
+# generic rule "%: %.jinja config.mk" doesn't seem to work for matching %.sql dependency for %.mysqlslap...
+# %.sql: %.sql.jinja config.mk
+%.sql: %.sql.jinja config.mk
+	$(RENDER) $<
+
+test/out/query/%.mysqlslap: test/in/query/%.sql $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
+	@mkdir -p $(dir $@)
+	$(eval MYSQLSLAP_QUERY = $(shell $(MAKE_SCRIPTS)/strip_sql.sh $<))
+	@if [ "$(MYSQLSLAP_QUERY)" == ";" ]; then \
+		echo "Skipping $< (empty query file)"; \
+	else \
+		echo mysqlslap --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query=$<; \
+		$(MAKE_SCRIPTS)/mysqlslap_wrapper.sh --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$(MYSQLSLAP_QUERY)" > $@; \
+	fi;
 
 # load test
 
-loadtest: $(CLUSTERDB_SCHEMA) $(CLUSTERDB_FILE) $(LOAD_TEST_QUERIES)
-	mysqlslap --query="$(shell $(MAKE_SCRIPTS)/stripsql.sh $(LOAD_TEST_QUERIES))" --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency)
+loadtest: $(LOAD_TEST_QUERY_RESULTS) $(CLUSTERDB_SCHEMA) $(CLUSTERDB_FILE)
 
 .PHONY: loadtest
 

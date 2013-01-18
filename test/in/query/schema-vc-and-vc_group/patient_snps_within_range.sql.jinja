@@ -1,0 +1,65 @@
+-- BASE QUERY: Given a patient, pull out all snps within a chromomsal region / or in a set of genes.
+-- params:
+-- where AD > 20 or DP > 20 (one of those, prob DP)
+-- where SB > num
+-- call any gene that have at least 1 variant that have ad or dp < 20 (they will want to resequence this)
+-- unique gene/exon pair with benign (BEN) or unclassified (UNCL)
+
+-- range stats from PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv (min mean max):
+
+-- start_posn: 
+--    chr1
+--    14773 9.89541e+07 249239759
+--    chr2
+--    127059 1.19084e+08 243166487
+--    chr3
+--    239554 1.15375e+08 197896678
+--    chr4
+--    22982 6.94281e+07 191043832
+--    chr5
+--    11582 8.63129e+07 180718790
+--    chr6
+--    304420 9.57892e+07 171048953
+--    chr7
+--    10116 8.69339e+07 159001258
+--    chr8
+--    45893 6.43091e+07 146184469
+--    chr9
+--    14365 8.61617e+07 141109713
+--    chr10
+--    92618 6.33712e+07 135524719
+--    chr11
+--    128525 5.5251e+07 134890495
+--    chr12
+--    68659 6.52507e+07 133840811
+--    chr13
+--    19059530 7.11335e+07 115092496
+--    chr14
+--    19000696 7.39783e+07 107282973
+--    chr15
+--    20015372 5.60591e+07 102515390
+--    chr16
+--    65444 3.91469e+07 90291077
+--    chr17
+--    48117 3.89509e+07 81180300
+--    chr18
+--    10148 2.94485e+07 78016252
+--    chr19
+--    246196 2.8846e+07 59118839
+--    chr20
+--    107746 3.56512e+07 62959011
+--    chr21
+--    9417135 2.53606e+07 48087537
+--    chr22
+--    16123252 3.1203e+07 51186814
+--
+--    max range is in chr1 (makes sense, smaller chromosome idx => larger in bp's) 
+-- start_posn  15  5.2771e+07  249239759 
+-- end_posn    15  5.2771e+07  249239759 
+-- chromosome  1   9.85677     22        
+select * from vc, vc_group
+    where vc.read_depth >= {{ min_read_depth }} and
+          vc_group.sb >= {{ min_strand_bias }} and
+          vc.start_posn >= {{ min_start_posn }} and 
+          vc.start_posn <= {{ max_start_posn }} and 
+          vc.chromosome = '{{ chromosome }}'

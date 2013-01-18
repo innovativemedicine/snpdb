@@ -2,3 +2,4 @@
 *.pyc
 # template files
 *.out
+test/out
