@@ -13,8 +13,10 @@ export MYSQL MYSQL_CLUSTERDB_OPTS_REMOTE MYSQL_CLUSTERDB_OPTS_LOCAL CLUSTERDB_NA
 
 # Loadtest configuration
 # queries to run
-export LOAD_TEST_QUERIES := $(shell find test/in/query/$(SCHEMA_FILENAME) -name '*.sql' -o -name '*.jinja' | sed 's/\.jinja//' | sort --unique)
-LOAD_TEST_QUERY_RESULTS = $(patsubst %.sql,%.mysqlslap,$(subst test/in,test/out,$(LOAD_TEST_QUERIES)))
+export LOAD_TEST_INPUT_DIR = test/in/query/$(SCHEMA_FILENAME)
+export LOAD_TEST_QUERIES := $(shell find $(LOAD_TEST_INPUT_DIR) -name '*.sql' -o -name '*.jinja' | sed 's/\.jinja//' | sort --unique)
+LOAD_TEST_QUERY_RESULTS = $(patsubst %.sql,%.mysqlslap.csv,$(subst test/in,test/out,$(LOAD_TEST_QUERIES)))
+export MYSQLSLAP_SUMMARY_FILE = test/out/query/$(SCHEMA_FILENAME)/summary.csv
 # sql template file parameters
 export min_strand_bias := 2
 export min_read_depth := 20

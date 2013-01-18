@@ -35,19 +35,25 @@ testparse: src/vcf/vcfparser.py
 %.sql: %.sql.jinja config.mk
 	$(RENDER) $<
 
-test/out/query/%.mysqlslap: test/in/query/%.sql $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
+test/out/query/%.mysqlslap.csv: test/in/query/%.sql $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
 	@mkdir -p $(dir $@)
 	$(eval MYSQLSLAP_QUERY = $(shell $(MAKE_SCRIPTS)/strip_sql.sh $<))
 	@if [ "$(MYSQLSLAP_QUERY)" == ";" ]; then \
 		echo "Skipping $< (empty query file)"; \
 	else \
 		echo mysqlslap --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query=$<; \
-		$(MAKE_SCRIPTS)/mysqlslap_wrapper.sh --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$(MYSQLSLAP_QUERY)" > $@; \
+		$(MAKE_SCRIPTS)/mysqlslap_wrapper.sh --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$(MYSQLSLAP_QUERY)" --csv | sed "s#^#$<,#" > $@; \
 	fi;
+
+$(MYSQLSLAP_SUMMARY_FILE): $(LOAD_TEST_QUERY_RESULTS)
+	# Ignore files that don't exist because their queries were empty
+	@echo "query_file,load_type,avg_time,min_time,max_time,clients,queries_per_client" > $@
+	# Sort output by max_time, min_time, avg_time, query_file
+	@cat $(LOAD_TEST_QUERY_RESULTS) | sort -g -k 5 -k 4 -k 3 -k 1 -nk 1 -t, -r >> $@
 
 # load test
 
-loadtest: $(LOAD_TEST_QUERY_RESULTS) $(CLUSTERDB_SCHEMA) $(CLUSTERDB_FILE)
+loadtest: test/out/query/$(SCHEMA_FILENAME)/summary.csv
 
 .PHONY: loadtest
 
