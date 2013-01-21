@@ -35,25 +35,50 @@ testparse: src/vcf/vcfparser.py
 %.sql: %.sql.jinja config.mk
 	$(RENDER) $<
 
-test/out/query/%.mysqlslap.csv: test/in/query/%.sql $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
+test/tmp/query/%.sql.strip: test/in/query/%.sql $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
 	@mkdir -p $(dir $@)
-	$(eval MYSQLSLAP_QUERY = $(shell $(MAKE_SCRIPTS)/strip_sql.sh $<))
-	@if [ "$(MYSQLSLAP_QUERY)" == ";" ]; then \
+	$(MAKE_SCRIPTS)/strip_sql.sh $< > $@
+
+test/out/query/%.mysqlslap.csv: test/tmp/query/%.sql.strip $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
+	@mkdir -p $(dir $@)
+	$(eval MYSQL_QUERY = $(shell cat $<))
+	@if [ "$(MYSQL_QUERY)" == ";" ]; then \
 		echo "Skipping $< (empty query file)"; \
+		touch $@; \
 	else \
-		echo mysqlslap --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query=$<; \
-		$(MAKE_SCRIPTS)/mysqlslap_wrapper.sh --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$(MYSQLSLAP_QUERY)" --csv | sed "s#^#$<,#" > $@; \
+		echo mysqlslap --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$<" \> $@; \
+		$(MAKE_SCRIPTS)/mysqlslap_wrapper.sh --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$<" --csv | sed 's#^#$<,#; s/,/	/g' > $@; \
 	fi;
 
-$(MYSQLSLAP_SUMMARY_FILE): $(LOAD_TEST_QUERY_RESULTS)
+test/out/query/%.explain.csv: test/tmp/query/%.sql.strip $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
+	@mkdir -p $(dir $@)
+	$(eval MYSQL_QUERY = $(shell cat $<))
+	$(eval CMD = $(call MYSQL_CSV,"explain partitions $(MYSQL_QUERY)") > $@)
+	@if [ "$(MYSQL_QUERY)" == ";" ]; then \
+		echo "Skipping $< (empty query file)"; \
+		touch $@; \
+	else \
+		echo '$(CMD)'; \
+		$(CMD); \
+	fi;
+
+test/tmp/query/%.summary.csv: test/out/query/%.mysqlslap.csv test/out/query/%.explain.csv
+	awk 'FNR > 1' $(word 2,$^) | $(MAKE_SCRIPTS)/cross.py $< - > $@
+
+$(SUMMARY_FILE): test/tmp/query/$(SCHEMA_FILENAME)/explain_header.csv $(SUMMARY_RESULTS) 
 	# Ignore files that don't exist because their queries were empty
-	@echo "query_file,load_type,avg_time,min_time,max_time,clients,queries_per_client" > $@
+	@echo "query_file unknown load_type avg_time min_time max_time clients queries_per_client" | sed 's/ /	/g' | paste - $< > $@
 	# Sort output by max_time, min_time, avg_time, query_file
-	@cat $(LOAD_TEST_QUERY_RESULTS) | sort -g -k 5 -k 4 -k 3 -k 1 -nk 1 -t, -r >> $@
+	@cat $(SUMMARY_RESULTS) | sort -g -k 6 -k 5 -k 4 -nk 1 -t$$'\t' -r >> $@
+
+test/tmp/query/%explain_header.csv: $(EXPLAIN_QUERY_RESULTS)
+	@mkdir -p $(dir $@)
+	awk 'FNR == 1' $(EXPLAIN_QUERY_RESULTS) | sort --unique > $@
+	@test "`wc -l $@ | awk '{print $$1}'`" = "1" || (echo "Saw different output columns for explain query result files:" && awk 'FNR == 1' $(EXPLAIN_QUERY_RESULTS) | sort --unique && rm $@ && exit 1)
 
 # load test
 
-loadtest: test/out/query/$(SCHEMA_FILENAME)/summary.csv
+loadtest: $(SUMMARY_FILE)
 
 .PHONY: loadtest
 

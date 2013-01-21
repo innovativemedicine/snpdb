@@ -3,3 +3,4 @@
 # template files
 *.out
 test/out
+test/tmp
