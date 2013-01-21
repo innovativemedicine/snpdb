@@ -58,8 +58,9 @@
 -- end_posn    15  5.2771e+07  249239759 
 -- chromosome  1   9.85677     22        
 select * from vc, vc_group
-    where vc.read_depth >= {{ min_read_depth }} and
+    where vc.vc_group_id = vc_group.id and
+          vc.read_depth >= {{ min_read_depth }} and
           vc_group.sb >= {{ min_strand_bias }} and
-          vc.start_posn >= {{ min_start_posn }} and 
-          vc.start_posn <= {{ max_start_posn }} and 
-          vc.chromosome = '{{ chromosome }}'
+          vc_group.start_posn >= {{ min_start_posn }} and 
+          vc_group.start_posn <= {{ max_start_posn }} and 
+          vc_group.chromosome = '{{ chromosome }}'
