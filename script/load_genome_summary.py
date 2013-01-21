@@ -69,11 +69,12 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
             # empty input
             pass
 
-    vc_group_table          = sql.Table('vc_group', cursor=c)              
-    vc_group_allele_table   = sql.Table('vc_group_allele', cursor=c)       
-    vc_genotype_table = sql.Table('vc_genotype', cursor=c)     
-    vc_table                = sql.Table('vc', cursor=c)                    
-    vc_allele_table                = sql.Table('vc_allele', cursor=c)                    
+    vc_group_table        = sql.Table('vc_group', cursor=c)                       
+    vc_group_allele_table = sql.Table('vc_group_allele', cursor=c)                
+    vc_genotype_table     = sql.Table('vc_genotype', cursor=c)                    
+    vc_table              = sql.Table('vc', cursor=c)                             
+    vc_allele_table       = sql.Table('vc_allele', cursor=c)                      
+    patient_table         = sql.Table('patient', cursor=c)                        
 
     pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
     # for each vc_group
@@ -85,6 +86,12 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
 
         info = vcf.parse('info', row[47 - 1])
         vc_group_columns = {
+            'chromosome'  : row[22 - 1],
+            'start_posn'  : row[23 - 1],
+            'end_posn'    : row[24 - 1],
+            'ref'         : vcf.parse('ref', row[25 - 1]),
+            'dbsnp_id'    : vcf.parse('dbsnp_id', row[42 - 1]),
+
             # 'genotype_format' : row[48 - 1],
             'quality'         : row[45 - 1],
             'filter'          : row[46 - 1],
@@ -160,20 +167,20 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
 
         vc_columns = {
             'vc_group_id' : vc_group_table.lastrowid,
-            'chromosome'  : row[22 - 1],
-            'start_posn'  : row[23 - 1],
-            'end_posn'    : row[24 - 1],
-            'ref'         : vcf.parse('ref', row[25 - 1]),
-            'dbsnp_id'    : vcf.parse('dbsnp_id', row[42 - 1]),
             'zygosity'    : row[39 - 1],
         }
 
-        ref_and_alts = as_list(vc_columns['ref']) + alts
+        ref_and_alts = as_list(vc_group_columns['ref']) + alts
 
         # for each vc in vc_group
         for genotype in [vcf.parse('genotype', row[gf]) for gf in xrange(49 - 1, 60)]:
             # vc_columns['genotype_source'] = row[gf]
 
+            patient_columns = {
+            }
+            insert(patient_table, patient_columns)
+
+            vc_columns['patient_id'] = patient_table.lastrowid
             if genotype != ('.', '.'):
                 ((allele1_idx, allele2_idx), vc_columns['phased']) = genotype['GT'] 
                 vc_columns['allele1'] = ref_and_alts[allele1_idx]
@@ -184,7 +191,7 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
                 
                 # for each vc_genotype in (alleles in vc_group x alleles in vc_group x vc)
                 vc_genotype_fields = [
-                    vcf.ordered_alleles(vc_columns['ref'], alts), 
+                    vcf.ordered_alleles(vc_group_columns['ref'], alts), 
                     as_list(genotype.get('PL')),
                 ]
                 for (vc_genotype_allele1, vc_genotype_allele2), phred_likelihood in arity_zip(vc_genotype_fields, table=vc_genotype_table, key="biallelic genotypes in vc_group"):

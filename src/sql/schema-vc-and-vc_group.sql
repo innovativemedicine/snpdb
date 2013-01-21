@@ -21,6 +21,21 @@
 -- (i.e. primary key is set of patient_id, chr, pos, group_id) (assume only ever 1 run)
 create table vc_group (
     id bigint not null auto_increment,
+
+    -- variant
+    
+    -- fields 22,28,34,40 (22 == Chr, 28,34,40 == unlabeled) were all the same
+    chromosome varchar(50), -- maxlen(Chr) == 21, 0 nulls
+    -- fields 23,24,29,30,35,36,41 (23 == Start, 24 == End) were all the same
+    start_posn integer, -- >= 1 ? 0 nulls
+    end_posn integer, -- >= 1 ? 0 nulls
+    -- fields 26,32,38 (26 == Obs, 32,38 == unlabeled) were all the same
+    -- alt varchar(200), -- maxlen(Obs) == 1, 0 nulls, I think (([ACGTN]+|<$ID>);)+, arbitrary choice
+    -- fields 25,31,37,43 (25 == Ref, 31,37,43 == unlabeled) were all the same
+    -- the reference allele
+    ref varchar(200), -- maxlen(Ref) == 1, 0 nulls, I think [ACGTN]+, arbitrary choice
+    dbsnp_id varchar(200), -- field #42
+
     -- genotype_format varchar(256), -- field #48
     quality double, -- field #45, "traditionally people use integer phred scores, this field is permitted to be a floating point to enable higher resolution for low confidence calls if desired" (not defined in summary file for whatever reason)
     filter varchar(60), -- field #46, maxlen() == 27 "traditionally people use integer phred scores, this field is permitted to be a floating point to enable higher resolution for low confidence calls if desired" (not defined in summary file for whatever reason)
@@ -164,6 +179,11 @@ create table vc_group_allele (
     primary key (vc_group_id, allele)
 ) ENGINE=NDB;
 
+create table patient (
+    id bigint not null auto_increment,
+    primary key (id)
+) ENGINE=NDB;
+
 -- This is really patient_variant / sample_variant.  A "sample" in this case is synonymous with "a 
 -- patient's genome".  We assume patient and sample are 1-to-1, so we neglect have a patient_id in 
 -- this table.  If we were to ever have multiple runs for a patient, we'd want to use patient_id's.
@@ -171,20 +191,7 @@ create table vc_group_allele (
 create table vc (
     id bigint not null auto_increment,
     vc_group_id bigint not null,
-
-    -- variant
-    
-    -- fields 22,28,34,40 (22 == Chr, 28,34,40 == unlabeled) were all the same
-    chromosome varchar(50), -- maxlen(Chr) == 21, 0 nulls
-    -- fields 23,24,29,30,35,36,41 (23 == Start, 24 == End) were all the same
-    start_posn integer, -- >= 1 ? 0 nulls
-    end_posn integer, -- >= 1 ? 0 nulls
-    -- fields 26,32,38 (26 == Obs, 32,38 == unlabeled) were all the same
-    -- alt varchar(200), -- maxlen(Obs) == 1, 0 nulls, I think (([ACGTN]+|<$ID>);)+, arbitrary choice
-    -- fields 25,31,37,43 (25 == Ref, 31,37,43 == unlabeled) were all the same
-    -- the reference allele
-    ref varchar(200), -- maxlen(Ref) == 1, 0 nulls, I think [ACGTN]+, arbitrary choice
-    dbsnp_id varchar(200), -- field #42
+    patient_id bigint not null,
 
     -- maybe useful to retain fields that aren't defined in this table... but in that case one 
     -- should consider adding a new vc_group_info_* table, or add desired fields to an existing 
@@ -305,6 +312,8 @@ create table vc (
     -- foreign key (vc_group_id, allele2) references vc_group_allele(vc_group_id, allele),
     -- vc_genotype
     index (id, allele1, allele2),
+    index (patient_id),
+    foreign key (patient_id) references patient(id),
     primary key(id)
 ) ENGINE=NDB;
 
