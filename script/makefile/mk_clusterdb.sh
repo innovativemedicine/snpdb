@@ -1,4 +1,5 @@
-#!/bin/bash -e -x
+#!/bin/bash -x
+set -e
 MYSQL_CLUSTERDB="$MYSQL $MYSQL_CLUSTERDB_OPTS $CLUSTERDB_NAME"
 
 mysql $MYSQL_CLUSTERDB_OPTS -e "drop database if exists $CLUSTERDB_NAME; create database $CLUSTERDB_NAME"
