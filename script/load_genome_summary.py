@@ -10,6 +10,7 @@ import fileinput
 import re
 import warnings
 from progressbar import ProgressBar, Counter, Percentage, Bar, RotatingMarker, ETA
+from multiprocessing import Process, Queue, Lock, Value
 
 def main():
     parser = argparsers.sql_parser(description="Load a genome summary file from the pipeline into the MySQL cluster database")
@@ -17,6 +18,8 @@ def main():
     parser.add_argument("--delim", default=",", help="delimiter")
     parser.add_argument("--quote", default='"', help="quote character")
     parser.add_argument("--dry-run", action="store_true", help="skip insertion")
+    parser.add_argument("--quiet", action="store_true", help="don't print insertions when --dry-run is set")
+    parser.add_argument("--threads", type=int, default=1, help="split input into --threads chunks")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
     args = parser.parse_args()
     records = None
@@ -26,22 +29,68 @@ def main():
 
     warnings.filterwarnings('error', category=MySQLdb.Warning)
 
-    db = MySQLdb.connect(
-            host=args.host,
-            port=args.port,
-            user=args.user,
-            passwd=args.password,
-            db=args.db)
+    widgets = ['loading data: ', Counter(), '/', str(records), '(', Percentage(), ')', ' ', Bar(marker=RotatingMarker()), ' ', ETA()]
+    pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
+    queues = [Queue() for i in xrange(args.threads)]
+    l = Lock()
+    processed = Value('i', 0, lock=False)
+    def queue_input(queue):
+        while True:
+            line = queue.get()
+            if records != None:
+                l.acquire()
+                processed.value += 1
+                if pbar is not None:
+                    pbar.update(processed.value)
+                l.release()
+            if line is None:
+                break
+            yield line
 
+    processes = [
+            Process(target=load_genome_summary, 
+                    args=(MySQLdb.connect(host=args.host,
+                                          port=args.port,
+                                          user=args.user,
+                                          passwd=args.password,
+                                          db=args.db), 
+                          queue_input(q)), 
+                    kwargs=dict(delim=args.delim,
+                                quote=args.quote,
+                                skip_header=not args.no_skip_header,
+                                dry_run=args.dry_run,
+                                records=records,
+                                quiet=args.quiet))
+                    for q in queues]
+
+    for p in processes:
+        p.start()
+
+    skip_header = not args.no_skip_header
+    if skip_header:
+        try:
+            input.next()
+        except StopIteration:
+            # empty input
+            pass
+
+    i = 0
+    for line in input:
+        queues[i].put(line)
+        i = (i + 1) % len(queues)
+    for q in queues:
+        q.put(None)
+
+    for p in processes:
+        p.join()
+
+    pbar.finish()
+
+def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_run=False, records=None, quiet=False):
     # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
     # the error:
     # Got temporary error 233 'Out of operation records in transaction coordinator (increase MaxNoOfConcurrentOperations)' from NDBCLUSTER 
     db.autocommit(True)
-
-    load_genome_summary(db, input, delim=args.delim, quote=args.quote, skip_header=not args.no_skip_header, dry_run=args.dry_run, records=records)
-
-def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_run=False, records=None):
-    widgets = ['loading data: ', Counter(), '/', str(records), '(', Percentage(), ')', ' ', Bar(marker=RotatingMarker()), ' ', ETA()]
 
     def insert(table, dic):
         if not dry_run:
@@ -49,14 +98,14 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
                 return table.insert(dic=dic)
             except Exception as e:
                 msg = e.message if e.message else e.__str__()
-                raise type(e)(msg + " at line {lineno}".format(lineno=input.lineno()))
+                raise type(e)(msg + " at line {lineno}".format(lineno=1))
         print "insert into {table} {dic}".format(table=table.name, dic=dic)
 
     def arity_zip(args, error=None, table=None, key=None):
         if error is None:
             error = "Number of {table} columns don't all match the number of {key}; " + \
                     "skipping insertion into {table} at line {lineno}"
-        return check_arity_zip(args, error.format(lineno=input.lineno(), table=table.name, key=key))
+        return check_arity_zip(args, error.format(lineno=1, table=table.name, key=key))
 
 
     c = db.cursor()
@@ -76,11 +125,8 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
     vc_allele_table       = sql.Table('vc_allele', cursor=c)                      
     patient_table         = sql.Table('patient', cursor=c)                        
 
-    pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
     # for each vc_group
     for row in csv_input:
-        if pbar is not None:
-            pbar.update(input.lineno())
 
         row = [None if f == '' else f for f in row] 
 
@@ -216,7 +262,6 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
                     }
                     insert(vc_allele_table, vc_allele_columns)
 
-    pbar.finish()
     db.commit()
     c.close()
 
