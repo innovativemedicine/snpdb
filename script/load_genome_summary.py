@@ -19,11 +19,20 @@ def main():
     parser.add_argument("--quote", default='"', help="quote character")
     parser.add_argument("--dry-run", action="store_true", help="skip insertion")
     parser.add_argument("--quiet", action="store_true", help="don't print insertions when --dry-run is set")
+    parser.add_argument("--no-progress", action="store_true", help="don't show a progress bar (skips line counting input files at the beginning, which could take a while)")
+    parser.add_argument("--records", type=int, help="skip line counting input files, and use --records as the total number of lines in the input files")
     parser.add_argument("--threads", type=int, default=1, help="split input into --threads chunks")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
+    parser.add_argument("--buffer", type=int, required=False, help="size of the buffer for dividing input amongst threads (lower this if you're thrashing; the default is the maximum semaphore value for your OS)")
+    parser.add_argument("--profile", help="run yappi and output profiling results to --profile")
     args = parser.parse_args()
-    records = None
-    if len(args.genome_summary_file) != 0 and '-' not in args.genome_summary_file:
+
+    if args.profile is not None:
+        import yappi
+        yappi.start()
+
+    records = args.records
+    if records is None and not args.no_progress and len(args.genome_summary_file) != 0 and '-' not in args.genome_summary_file:
         records = sum(file_len(f) for f in args.genome_summary_file)
     input = fileinput.FileInput(args.genome_summary_file)
 
@@ -31,20 +40,20 @@ def main():
 
     widgets = ['loading data: ', Counter(), '/', str(records), '(', Percentage(), ')', ' ', Bar(marker=RotatingMarker()), ' ', ETA()]
     pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
-    queues = [Queue() for i in xrange(args.threads)]
+    queues = [Queue(args.buffer) if args.buffer is not None else Queue() for i in xrange(args.threads)]
     l = Lock()
     processed = Value('i', 0, lock=False)
     def queue_input(queue):
         while True:
             line = queue.get()
+            if line is None:
+                break
             if records != None:
                 l.acquire()
                 processed.value += 1
                 if pbar is not None:
                     pbar.update(processed.value)
                 l.release()
-            if line is None:
-                break
             yield line
 
     processes = [
@@ -75,9 +84,13 @@ def main():
             pass
 
     i = 0
+    # j = 0
     for line in input:
         queues[i].put(line)
         i = (i + 1) % len(queues)
+        # j += 1
+        # if j % 100 == 0:
+        #     print j 
     for q in queues:
         q.put(None)
 
@@ -85,6 +98,11 @@ def main():
         p.join()
 
     pbar.finish()
+
+    if args.profile is not None:
+        yappi.stop()
+        with open(args.profile, 'w') as f:
+            yappi.print_stats(out=f)
 
 def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_run=False, records=None, quiet=False):
     # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
@@ -99,7 +117,8 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
             except Exception as e:
                 msg = e.message if e.message else e.__str__()
                 raise type(e)(msg + " at line {lineno}".format(lineno=1))
-        print "insert into {table} {dic}".format(table=table.name, dic=dic)
+        if not quiet:
+            print "insert into {table} {dic}".format(table=table.name, dic=dic)
 
     def arity_zip(args, error=None, table=None, key=None):
         if error is None:
@@ -279,6 +298,7 @@ def check_arity_zip(args, error=None):
     return zip(*args)
 
 def file_len(fname):
+    i = 0
     with open(fname) as f:
         for i, l in enumerate(f):
             pass
