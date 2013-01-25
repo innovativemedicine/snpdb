@@ -40,6 +40,48 @@ def main():
 
     widgets = ['loading data: ', Counter(), '/', str(records), '(', Percentage(), ')', ' ', Bar(marker=RotatingMarker()), ' ', ETA()]
     pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
+
+    skip_header = not args.no_skip_header
+    if skip_header:
+        try:
+            input.next()
+        except StopIteration:
+            # empty input
+            pass
+
+    if args.threads > 1:
+        load_genome_summary_parallel(input, records, pbar, args)
+    else:
+        processed = [0]
+        def sequential_input():
+            for line in input:
+                if records != None:
+                    processed[0] += 1
+                    if pbar is not None:
+                        pbar.update(processed[0])
+                yield line
+        load_genome_summary(
+                MySQLdb.connect(
+                    host=args.host,
+                    port=args.port,
+                    user=args.user,
+                    passwd=args.password,
+                    db=args.db), 
+                sequential_input(),
+                delim=args.delim,
+                quote=args.quote,
+                dry_run=args.dry_run,
+                records=records,
+                quiet=args.quiet)
+
+    pbar.finish()
+
+    if args.profile is not None:
+        yappi.stop()
+        with open(args.profile, 'w') as f:
+            yappi.print_stats(out=f)
+
+def load_genome_summary_parallel(input, records, pbar, args):
     queues = [Queue(args.buffer) if args.buffer is not None else Queue() for i in xrange(args.threads)]
     l = Lock()
     processed = Value('i', 0, lock=False)
@@ -66,7 +108,6 @@ def main():
                           queue_input(q)), 
                     kwargs=dict(delim=args.delim,
                                 quote=args.quote,
-                                skip_header=not args.no_skip_header,
                                 dry_run=args.dry_run,
                                 records=records,
                                 quiet=args.quiet))
@@ -74,14 +115,6 @@ def main():
 
     for p in processes:
         p.start()
-
-    skip_header = not args.no_skip_header
-    if skip_header:
-        try:
-            input.next()
-        except StopIteration:
-            # empty input
-            pass
 
     i = 0
     # j = 0
@@ -97,14 +130,7 @@ def main():
     for p in processes:
         p.join()
 
-    pbar.finish()
-
-    if args.profile is not None:
-        yappi.stop()
-        with open(args.profile, 'w') as f:
-            yappi.print_stats(out=f)
-
-def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_run=False, records=None, quiet=False):
+def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=None, quiet=False):
     # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
     # the error:
     # Got temporary error 233 'Out of operation records in transaction coordinator (increase MaxNoOfConcurrentOperations)' from NDBCLUSTER 
@@ -130,12 +156,6 @@ def load_genome_summary(db, input, delim=",", quote='"', skip_header=True, dry_r
     c = db.cursor()
 
     csv_input = csv.reader(input, delimiter=delim, quotechar=quote)
-    if skip_header:
-        try:
-            input.next()
-        except StopIteration:
-            # empty input
-            pass
 
     vc_group_table        = sql.Table('vc_group', cursor=c)                       
     vc_group_allele_table = sql.Table('vc_group_allele', cursor=c)                
