@@ -4,7 +4,8 @@ import vcf
 import sql
 
 import sys
-import MySQLdb
+# import MySQLdb
+import oursql
 import csv
 import fileinput
 import re
@@ -36,7 +37,7 @@ def main():
         records = sum(file_len(f) for f in args.genome_summary_file)
     input = fileinput.FileInput(args.genome_summary_file)
 
-    warnings.filterwarnings('error', category=MySQLdb.Warning)
+    # warnings.filterwarnings('error', category=MySQLdb.Warning)
 
     widgets = ['loading data: ', Counter(), '/', str(records), '(', Percentage(), ')', ' ', Bar(marker=RotatingMarker()), ' ', ETA()]
     pbar = ProgressBar(widgets=widgets, maxval=records).start() if records is not None else None
@@ -61,12 +62,7 @@ def main():
                         pbar.update(processed[0])
                 yield line
         load_genome_summary(
-                MySQLdb.connect(
-                    host=args.host,
-                    port=args.port,
-                    user=args.user,
-                    passwd=args.password,
-                    db=args.db), 
+                connect(args), 
                 sequential_input(),
                 delim=args.delim,
                 quote=args.quote,
@@ -80,6 +76,20 @@ def main():
         yappi.stop()
         with open(args.profile, 'w') as f:
             yappi.print_stats(out=f)
+
+def connect(args):
+    # return MySQLdb.connect(
+    #         host=args.host,
+    #         port=args.port,
+    #         user=args.user,
+    #         passwd=args.password,
+    #         db=args.db)
+    return oursql.connect(
+            args.host,
+            args.user,
+            args.password,
+            port=args.port,
+            db=args.db)
 
 def load_genome_summary_parallel(input, records, pbar, args):
     queues = [Queue(args.buffer) if args.buffer is not None else Queue() for i in xrange(args.threads)]
@@ -100,11 +110,7 @@ def load_genome_summary_parallel(input, records, pbar, args):
 
     processes = [
             Process(target=load_genome_summary, 
-                    args=(MySQLdb.connect(host=args.host,
-                                          port=args.port,
-                                          user=args.user,
-                                          passwd=args.password,
-                                          db=args.db), 
+                    args=(connect(args), 
                           queue_input(q)), 
                     kwargs=dict(delim=args.delim,
                                 quote=args.quote,
@@ -134,17 +140,21 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
     # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
     # the error:
     # Got temporary error 233 'Out of operation records in transaction coordinator (increase MaxNoOfConcurrentOperations)' from NDBCLUSTER 
-    db.autocommit(True)
+    # db.autocommit(True)
 
-    def insert(table, dic):
+    def insert_wrapper(table, dic_or_dics, do_insert):
         if not dry_run:
             try:
-                return table.insert(dic=dic)
+                return do_insert(dic_or_dics)
             except Exception as e:
                 msg = e.message if e.message else e.__str__()
                 raise type(e)(msg + " at line {lineno}".format(lineno=1))
         if not quiet:
-            print "insert into {table} {dic}".format(table=table.name, dic=dic)
+            print "insert into {table} {dic_or_dics}".format(table=table.name, dic_or_dics=dic_or_dics)
+    def insert_many(table, values):
+        insert_wrapper(table, values, lambda vs: table.insert_many(values=vs))
+    def insert(table, dic):
+        insert_wrapper(table, dic, lambda d: table.insert(d))
 
     def arity_zip(args, error=None, table=None, key=None):
         if error is None:
@@ -152,17 +162,19 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
                     "skipping insertion into {table} at line {lineno}"
         return check_arity_zip(args, error.format(lineno=1, table=table.name, key=key))
 
-
     c = db.cursor()
+    c.execute("""SET autocommit = 1;""")
 
     csv_input = csv.reader(input, delimiter=delim, quotechar=quote)
 
-    vc_group_table        = sql.Table('vc_group', cursor=c)                       
-    vc_group_allele_table = sql.Table('vc_group_allele', cursor=c)                
-    vc_genotype_table     = sql.Table('vc_genotype', cursor=c)                    
-    vc_table              = sql.Table('vc', cursor=c)                             
-    vc_allele_table       = sql.Table('vc_allele', cursor=c)                      
-    patient_table         = sql.Table('patient', cursor=c)                        
+    vc_group_table = sql.table.oursql('vc_group', cursor=c)                       
+    vc_table = sql.table.oursql('vc', cursor=c)                             
+    patient_table = sql.table.oursql('patient', cursor=c)                        
+
+    # table we can batch insert (i.e. tables whose lastrowid's we do not need)
+    vc_group_allele_table = sql.table.oursql('vc_group_allele', cursor=c, fields=['vc_group_id', 'allele', 'af', 'mle_af', 'ac', 'mle_ac'])                
+    vc_genotype_table = sql.table.oursql('vc_genotype', cursor=c, fields=['vc_id', 'allele1', 'allele2', 'phred_likelihood'])                    
+    vc_allele_table = sql.table.oursql('vc_allele', cursor=c, fields=['vc_id', 'allele', 'allelic_depth'])
 
     # for each vc_group
     for row in csv_input:
@@ -238,17 +250,8 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
             get_list(info, 'AC'),
             get_list(info, 'MLEAC'),
         ]
-        for allele, af, mle_af, ac, mle_ac in arity_zip(vc_group_allele_fields, table=vc_group_table, key="alt alleles in vc_group"):
-            vc_group_allele_columns = {
-                'vc_group_id'   : vc_group_table.lastrowid,
-                'allele'        : allele,
-                # vc_group_allele_info columns
-                'af'          : af,
-                'mle_af'      : mle_af,
-                'ac'          : ac,
-                'mle_ac'      : mle_ac,
-            }
-            insert(vc_group_allele_table, vc_group_allele_columns)
+        insert_many(vc_group_allele_table, values=[[ vc_group_table.lastrowid, allele, af, mle_af, ac, mle_ac ] 
+            for allele, af, mle_af, ac, mle_ac in arity_zip(vc_group_allele_fields, table=vc_group_table, key="alt alleles in vc_group")])
 
         vc_columns = {
             'vc_group_id' : vc_group_table.lastrowid,
@@ -279,27 +282,16 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
                     vcf.ordered_alleles(vc_group_columns['ref'], alts), 
                     as_list(genotype.get('PL')),
                 ]
-                for (vc_genotype_allele1, vc_genotype_allele2), phred_likelihood in arity_zip(vc_genotype_fields, table=vc_genotype_table, key="biallelic genotypes in vc_group"):
-                    vc_genotype_columns = {
-                        'vc_id'            : vc_table.lastrowid,
-                        'allele1'          : vc_genotype_allele1,
-                        'allele2'          : vc_genotype_allele2,
-                        'phred_likelihood' : phred_likelihood,
-                    }
-                    insert(vc_genotype_table, vc_genotype_columns)
+                insert_many(vc_genotype_table, values=[[vc_table.lastrowid, vc_genotype_allele1, vc_genotype_allele2, phred_likelihood]
+                    for (vc_genotype_allele1, vc_genotype_allele2), phred_likelihood in arity_zip(vc_genotype_fields, table=vc_genotype_table, key="biallelic genotypes in vc_group")])
 
                 # for each vc_allele in (vc x alleles in ref, alts)
                 vc_allele_fields = [
                     ref_and_alts,
                     get_list(genotype, 'AD'),
                 ]
-                for allele, allelic_depth in arity_zip(vc_allele_fields, table=vc_allele_table, key="ref and alt alleles in vc_group"):
-                    vc_allele_columns = {
-                        'vc_id'         : vc_table.lastrowid,
-                        'allele'        : allele,
-                        'allelic_depth' : allelic_depth,
-                    }
-                    insert(vc_allele_table, vc_allele_columns)
+                insert_many(vc_allele_table, values=[[vc_table.lastrowid, allele, allelic_depth]
+                    for allele, allelic_depth in arity_zip(vc_allele_fields, table=vc_allele_table, key="ref and alt alleles in vc_group")])
 
     db.commit()
     c.close()
