@@ -266,7 +266,7 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
             insert(patient_table, patient_columns)
 
             vc_columns['patient_id'] = patient_table.lastrowid
-            if genotype != ('.', '.'):
+            if not (type(genotype) == tuple and genotype[0] == (None, None)):
                 ((allele1_idx, allele2_idx), vc_columns['phased']) = genotype['GT'] 
                 vc_columns['allele1'] = ref_and_alts[allele1_idx]
                 vc_columns['allele2'] = ref_and_alts[allele2_idx]
