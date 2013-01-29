@@ -145,11 +145,11 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
 
     def insert_wrapper(table, dic_or_dics, do_insert):
         if not dry_run:
-            try:
-                return do_insert(dic_or_dics)
-            except Exception as e:
-                msg = e.message if e.message else e.__str__()
-                raise type(e)(msg + " at line {lineno}".format(lineno=1))
+            # try:
+            return do_insert(dic_or_dics)
+            # except Exception as e:
+            #     msg = e.message if e.message else e.__str__()
+                # raise type(e)(msg + " at line {lineno}".format(lineno=1))
         if not quiet:
             print "insert into {table} {dic_or_dics}".format(table=table.name, dic_or_dics=dic_or_dics)
     def insert_many(table, values):
@@ -168,9 +168,9 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
 
     csv_input = csv.reader(input, delimiter=delim, quotechar=quote)
 
-    vc_group_table = sql.table.oursql('vc_group', cursor=c)                       
+    vc_group_table = sql.table.oursql('vc_group', cursor=c)
     vc_table = sql.table.oursql('vc', cursor=c)                             
-    patient_table = sql.table.oursql('patient', cursor=c)                        
+    patient_table = sql.table.oursql('patient', cursor=c)
 
     # table we can batch insert (i.e. tables whose lastrowid's we do not need)
     vc_group_allele_table = sql.table.oursql('vc_group_allele', cursor=c, fields=['vc_group_id', 'allele', 'af', 'mle_af', 'ac', 'mle_ac'])                
@@ -294,6 +294,9 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
                 insert_many(vc_allele_table, values=[[vc_table.lastrowid, allele, allelic_depth]
                     for allele, allelic_depth in arity_zip(vc_allele_fields, table=vc_allele_table, key="ref and alt alleles in vc_group")])
 
+    vc_group_allele_table.flush_buffer()
+    vc_genotype_table.flush_buffer()
+    vc_allele_table.flush_buffer()
     db.commit()
     c.close()
 
