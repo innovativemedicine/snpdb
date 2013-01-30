@@ -1,5 +1,11 @@
 import sys
 
+def _flat_list_size(l):
+    size = sys.getsizeof(l)
+    for e in l:
+        size += sys.getsizeof(e)
+    return size
+
 class Table(object):
     def __init__(self, name, cursor=None, fields=None):
         self.name = name
@@ -83,6 +89,7 @@ class oursql(Table):
             # pass
             self.buffer_maxsize = buffer_maxsize
             self.buffer = []
+            self._buffer_size_estimate = 0
             self._flush_handlers = []
             self._insert_many_query = self._get_insert_many_query(fields)
         else:
@@ -97,24 +104,37 @@ class oursql(Table):
         fields, values, cursor = self._get_insert_params(dic, fields, values, cursor)
 
         if self.buffer is not None:
-            self.buffer.append(values)
-            self._check_buffer()
+            return self._buffer_append(values)
         else:
             return self._do_insert(cursor, self._get_insert_many_query(fields), fields, values)
+
+    def _buffer_append(self, values):
+        self.buffer.append(values)
+        self._buffer_size_estimate += _flat_list_size(values)
+        return self._check_buffer()
+
+    def _buffer_extend(self, values):
+        self.buffer.extend(values)
+        for v in values:
+            self._buffer_size_estimate += _flat_list_size(v)
+        return self._check_buffer()
 
     def _check_buffer(self):
         if not self.buffer_maxsize or self._buffer_size() > self.buffer_maxsize:
             return self.flush_buffer()
 
     def flush_buffer(self):
+        if len(self.buffer) == 0:
+            return
         result = self._insert_many(values=self.buffer)
         self.buffer = []
+        self._buffer_size_estimate = 0
         for handler in self._flush_handlers:
             handler(self)
         return result
 
     def _buffer_size(self):
-        return sys.getsizeof(self.buffer)
+        return self._buffer_size_estimate
 
     def _insert_many(self, dics=None, fields=None, values=None, cursor=None):
         insert_many_query = None
@@ -138,7 +158,6 @@ class oursql(Table):
 
     def insert_many(self, dics=None, fields=None, values=None, cursor=None):
         if self.buffer is not None:
-            self.buffer.extend(values)
-            return self._check_buffer()
+            return self._buffer_extend(values)
         else:
             return self._insert_many(dics, fields, values, cursor)
