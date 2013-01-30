@@ -26,7 +26,9 @@ def main():
     parser.add_argument("--threads", type=int, default=1, help="split input into --threads chunks")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
     parser.add_argument("--buffer", type=int, required=False, help="size of the buffer for dividing input amongst threads (lower this if you're thrashing; the default is the maximum semaphore value for your OS)")
+    parser.add_argument("--insert-buffer", type=int, required=False, help="size (in MB) to buffer in memory before batch inserting")
     parser.add_argument("--profile", help="run yappi and output profiling results to --profile")
+    parser.add_argument("--disable-foreign-keys", action="store_true", help="disable foreign keys during insertion to permit bulk loading")
     args = parser.parse_args()
 
     if args.profile is not None:
@@ -51,25 +53,40 @@ def main():
             # empty input
             pass
 
-    if args.threads > 1:
-        load_genome_summary_parallel(input, records, pbar, args)
-    else:
-        processed = [0]
-        def sequential_input():
-            for line in input:
-                if records != None:
-                    processed[0] += 1
-                    if pbar is not None:
-                        pbar.update(processed[0])
-                yield line
-        load_genome_summary(
-                connect(args), 
-                sequential_input(),
-                delim=args.delim,
-                quote=args.quote,
-                dry_run=args.dry_run,
-                records=records,
-                quiet=args.quiet)
+
+    db = connect(args)
+    c = db.cursor()
+    try:
+        if args.disable_foreign_keys:
+            c.execute("""
+                SET foreign_key_checks = 0;
+            """)
+        if args.threads > 1:
+            load_genome_summary_parallel(input, records, pbar, args)
+        else:
+            processed = [0]
+            def sequential_input():
+                for line in input:
+                    if records != None:
+                        processed[0] += 1
+                        if pbar is not None:
+                            pbar.update(processed[0])
+                    yield line
+            load_genome_summary(
+                    connect(args), 
+                    sequential_input(),
+                    delim=args.delim,
+                    quote=args.quote,
+                    dry_run=args.dry_run,
+                    records=records,
+                    quiet=args.quiet,
+                    foreign_keys_disabled=args.disable_foreign_keys,
+                    insert_buffer=args.insert_buffer)
+    finally:
+        if args.disable_foreign_keys:
+            c.execute("""
+                SET foreign_key_checks = 1;
+            """)
 
     pbar.finish()
 
@@ -117,7 +134,9 @@ def load_genome_summary_parallel(input, records, pbar, args):
                                 quote=args.quote,
                                 dry_run=args.dry_run,
                                 records=records,
-                                quiet=args.quiet))
+                                quiet=args.quiet,
+                                foreign_keys_disabled=args.disable_foreign_keys,
+                                insert_buffer=args.insert_buffer))
                     for q in queues]
 
     for p in processes:
@@ -137,7 +156,7 @@ def load_genome_summary_parallel(input, records, pbar, args):
     for p in processes:
         p.join()
 
-def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=None, quiet=False):
+def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=None, quiet=False, foreign_keys_disabled=False, insert_buffer=4):
     # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
     # the error:
     # Got temporary error 233 'Out of operation records in transaction coordinator (increase MaxNoOfConcurrentOperations)' from NDBCLUSTER 
@@ -168,14 +187,83 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
 
     csv_input = csv.reader(input, delimiter=delim, quotechar=quote)
 
-    vc_group_table = sql.table.oursql('vc_group', cursor=c)
-    vc_table = sql.table.oursql('vc', cursor=c)                             
-    patient_table = sql.table.oursql('patient', cursor=c)
+    vc_group_fields = None
+    vc_fields = None
+    patient_fields = None
+    if foreign_keys_disabled:
+        vc_group_fields = [
+            'chromosome',
+            'start_posn',
+            'end_posn',
+            'ref',
+            'dbsnp_id',
+            # 'genotype_format',
+            'quality',
+            'filter',
+            # annovar columns
+            'otherinfo',
+            'func',
+            'gene',
+            'exonicfunc',
+            'aachange',
+            'conserved',
+            '1000g2011may_all',
+            'dbsnp135',
+            'ljb_phylop_pred',
+            'ljb_sift_pred',
+            'ljb_polyphen2_pred',
+            'ljb_lrt_pred',
+            'ljb_mutationtaster_pred',
+            'ljb_gerppp',
+            'segdup',
+            'esp5400_all',
+            'avsift',
+            'ljb_phylop',
+            'ljb_sift',
+            'ljb_polyphen2',
+            'ljb_lrt',
+            'ljb_mutationtaster',
+            # vc_group_info columns
+            # 'info_source',
+            'ds',
+            'inbreeding_coeff',
+            'base_q_rank_sum',
+            'mq_rank_sum',
+            'read_pos_rank_sum',
+            'dels',
+            'fs',
+            'haplotype_score',
+            'mq',
+            'qd',
+            'sb',
+            'vqslod',
+            'an',
+            'dp',
+            'mq0',
+            'culprit',
+        ]
+        vc_fields = [
+            'vc_group_id',
+            'zygosity',
+            'patient_id',
+            'phased',
+            'allele1',
+            'allele2',
+            'read_depth',
+            'genotype_quality',
+        ]
+        patient_fields = [
+        ]
 
-    # table we can batch insert (i.e. tables whose lastrowid's we do not need)
-    vc_group_allele_table = sql.table.oursql('vc_group_allele', cursor=c, fields=['vc_group_id', 'allele', 'af', 'mle_af', 'ac', 'mle_ac'])                
-    vc_genotype_table = sql.table.oursql('vc_genotype', cursor=c, fields=['vc_id', 'allele1', 'allele2', 'phred_likelihood'])                    
-    vc_allele_table = sql.table.oursql('vc_allele', cursor=c, fields=['vc_id', 'allele', 'allelic_depth'])
+    # TODO: add buffer_maxsize
+    vc_group_table = sql.table.oursql('vc_group', cursor=c, fields=vc_group_fields, buffer_maxsize=insert_buffer*1024*1024, foreign_keys_disabled=foreign_keys_disabled)
+    vc_table = sql.table.oursql('vc', cursor=c, fields=vc_fields, insert_buffer*1024*1024, foreign_keys_disabled=foreign_keys_disabled)
+    patient_table = sql.table.oursql('patient', cursor=c, fields=patient_fields, insert_buffer*1024*1024, foreign_keys_disabled=foreign_keys_disabled)
+
+    # tables we can batch insert (i.e. tables whose lastrowid's we do not need)
+    vc_group_allele_table = sql.table.oursql('vc_group_allele', cursor=c, fields=['vc_group_id', 'allele', 'af', 'mle_af', 'ac', 'mle_ac'], foreign_keys_disabled=foreign_keys_disabled)                
+    vc_genotype_table = sql.table.oursql('vc_genotype', cursor=c, fields=['vc_id', 'allele1', 'allele2', 'phred_likelihood'], foreign_keys_disabled=foreign_keys_disabled)                    
+    vc_allele_table = sql.table.oursql('vc_allele', cursor=c, fields=['vc_id', 'allele', 'allelic_depth'], foreign_keys_disabled=foreign_keys_disabled)
 
     # for each vc_group
     for row in csv_input:

@@ -1,11 +1,51 @@
 import sys
 
+def _fetchone(cursor, query, params=()):
+    stuff = cursor.execute(query, params)
+    # hope this returns None for empty result set
+    result = cursor.fetchone()
+    if result is not None:
+        result = result[0] 
+    if result is not None:
+        cursor.nextset()
+    return result
+
 class Table(object):
-    def __init__(self, name, cursor=None, fields=None):
+    def __init__(self, name, cursor=None, fields=None, foreign_keys_disabled=False):
         self.name = name
         self.cursor = cursor 
         self.fields = fields
         self.lastrowid = None
+        self.foreign_keys_disabled = foreign_keys_disabled
+        if self.foreign_keys_disabled:
+            # stack overflow
+            # SELECT TABLE_ROWS
+            # FROM information_schema.tables 
+            # http://www.bram.us/2008/07/30/mysql-get-next-auto_increment-value-fromfor-table/
+            self.autoincrement = _fetchone(cursor, """
+                select AUTO_INCREMENT 
+                from information_schema.TABLES
+                where table_name = {param}
+                  and table_schema = DATABASE();
+            """.format(param=self._param), (self.name,))
+            self.autoincrement_field = _fetchone(cursor, """
+                select column_name 
+                from information_schema.columns 
+                where extra = 'auto_increment'
+                  and table_name = {param}
+                  and table_schema = DATABASE();
+            """.format(param=self._param), (self.name,))
+            # self.cursor.execute("""
+            #     SELECT AUTO_INCREMENT 
+            #     FROM information_schema.TABLES
+            #     WHERE table_name = {param}
+            #       AND table_schema = DATABASE();
+            # """.format(param=self._param), (self.name,))
+            # # hope this returns None for empty result set
+            # self.autoincrement = self.cursor.fetchone()
+            # if self.autoincrement is not None:
+            #     self.autoincrement = self.autoincrement[0] 
+
 
     # insert(cursor, table, dict={ 'x':1, 'y':2 })
     # insert(cursor, table, fields={..}, values={..})
@@ -27,7 +67,9 @@ class Table(object):
         if len(fields) != len(values):
             raise RuntimeError("Number of fields didn't match number of values for insert into {name}".format(name=self.name))
 
-        return self._do_insert(cursor, self._get_insert_many_query(fields), fields, values)
+        result = self._do_insert(cursor, self._get_insert_many_query(fields), fields, values)
+        self._inc_autoincrement()
+        return result
 
     def _get_attr(self, attr):
         value = getattr(self, attr)
@@ -37,7 +79,10 @@ class Table(object):
 
     def _get_insert_many_query(self, fields):
         sql_params = ', '.join([self._param]*len(fields))
-        return """insert into {table} ({fields}) values ({values})""".format(table=self.name, fields=', '.join(fields), values=sql_params)
+        if self.foreign_keys_disabled and self.autoincrement_field is not None:
+            return """insert into {table} ({auto_field}, {fields}) values ({auto_inc}, {values})""".format(table=self.name, auto_field=self.autoincrement_field, auto_inc=self.autoincrement, fields=', '.join(fields), values=sql_params)
+        else:
+            return """insert into {table} ({fields}) values ({values})""".format(table=self.name, fields=', '.join(fields), values=sql_params)
 
     def _get_insert_params(self, dic=None, fields=None, values=None, cursor=None):
 
@@ -63,21 +108,31 @@ class Table(object):
 
         return (fields, values, cursor)
 
+    def _inc_autoincrement(self, by=1):
+        if self.foreign_keys_disabled and self.autoincrement is not None:
+            self.autoincrement += by 
+
+    def lastrowid(self):
+        if self.foreign_keys_disabled:
+            return self.autoincrement - 1
+        return self.lastrowid
+
     def _do_insert(self, cursor, query, fields, values):
         result = cursor.execute(self._get_insert_many_query(fields), values)
         # not sure if this will work for tables without autoincrement...
-        self.lastrowid = cursor.lastrowid
+        if not self.foreign_keys_disabled:
+            self.lastrowid = cursor.lastrowid
         return result
 
 class MySQLdb(Table):
     _param = '%s'
-    def __init__(self, name, cursor=None, fields=None):
-        super(MySQLdb, self).__init__(name, cursor, fields)
+    def __init__(self, name, cursor=None, fields=None, foreign_keys_disabled=False):
+        super(MySQLdb, self).__init__(name, cursor, fields, foreign_keys_disabled)
 
 class oursql(Table):
     _param = '?'
-    def __init__(self, name, cursor=None, fields=None, buffer_maxsize=4 * 1024*1024):
-        super(oursql, self).__init__(name, cursor, fields)
+    def __init__(self, name, cursor=None, fields=None, buffer_maxsize=4 * 1024*1024, foreign_keys_disabled=False):
+        super(oursql, self).__init__(name, cursor, fields, foreign_keys_disabled)
         if fields is not None:
             # prepare stmt
             # pass
@@ -96,11 +151,14 @@ class oursql(Table):
         #     import pdb; pdb.set_trace()
         fields, values, cursor = self._get_insert_params(dic, fields, values, cursor)
 
+        result = None
         if self.buffer is not None:
             self.buffer.append(values)
-            self._check_buffer()
+            result = self._check_buffer()
         else:
-            return self._do_insert(cursor, self._get_insert_many_query(fields), fields, values)
+            result = self._do_insert(cursor, self._get_insert_many_query(fields), fields, values)
+        self._inc_autoincrement()
+        return result
 
     def _check_buffer(self):
         if not self.buffer_maxsize or self._buffer_size() > self.buffer_maxsize:
@@ -134,7 +192,9 @@ class oursql(Table):
                 insert_many_query = self._insert_many_query
             else:
                 insert_many_query = self._get_insert_many_query(fields)
-        return self.cursor.executemany(insert_many_query, values)
+        result = self.cursor.executemany(insert_many_query, values)
+        self._inc_autoincrement(len(values))
+        return result
 
     def insert_many(self, dics=None, fields=None, values=None, cursor=None):
         if self.buffer is not None:
