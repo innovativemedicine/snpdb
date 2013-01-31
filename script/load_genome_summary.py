@@ -10,7 +10,7 @@ import oursql
 import csv
 import fileinput
 import re
-import warnings
+# import warnings
 from progressbar import ProgressBar, Counter, Percentage, Bar, RotatingMarker, ETA
 from multiprocessing import Process, Queue, Lock, Value
 
@@ -90,7 +90,8 @@ def connect(args):
             args.user,
             args.password,
             port=args.port,
-            db=args.db)
+            db=args.db,
+            raise_on_warnings=False)
 
 def load_genome_summary_parallel(input, records, pbar, args):
     queues = [Queue(args.buffer) if args.buffer is not None else Queue() for i in xrange(args.threads)]
