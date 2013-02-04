@@ -1,0 +1,23 @@
+Our use case:
+
+- fast aggregation and range queries on all data, with index support for fields
+  - range queries:
+    - SNPs within a chromosome, basepair range
+  - index query:
+    - SNPs in some set of genes
+- good join performance with at least 5 tables OR support for nested data structures (e.g. lists) 
+  that allows denormalization of numerical data
+  - list of tables in relational schema (for reference)
+    - vc
+    - vc_genotype
+    - vc_allele
+    - vc_group
+    - vc_group_allele
+- data life cycle
+  - bulk load sometimes
+  - bulk update sometimes (same size as a previous load?)
+    - why: various statistics (in INFO) are calculated per vc_group; if an additional sample was 
+      added to a vc_group, these statistics need to be updated
+  - all-data read frequently (within some range query) 
+- scalability
+  - must scale to terabytes of data
