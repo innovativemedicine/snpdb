@@ -50,6 +50,9 @@ test/out/query/%.mysqlslap.csv: test/tmp/query/%.sql.strip $(CLUSTERDB_FILE) $(C
 		$(MAKE_SCRIPTS)/mysqlslap_wrapper.sh --create-schema=$(CLUSTERDB_NAME) --iterations=$(iterations) --concurrency=$(concurrency) --query="$<" --csv | sed 's#^#$<,#; s/,/	/g' > $@; \
 	fi;
 
+# loadtest results are expensive to recalculate, so don't delete them
+.SECONDARY: $(LOAD_TEST_QUERY_RESULTS) $(EXPLAIN_QUERY_RESULTS)
+
 test/out/query/%.explain.csv: test/tmp/query/%.sql.strip $(CLUSTERDB_FILE) $(CLUSTERDB_SCHEMA)
 	@mkdir -p $(dir $@)
 	$(eval MYSQL_QUERY = $(shell cat $<))
@@ -69,7 +72,7 @@ $(SUMMARY_FILE): test/tmp/query/$(SCHEMA_FILENAME)/explain_header.csv $(SUMMARY_
 	# Ignore files that don't exist because their queries were empty
 	@echo "query_file unknown load_type avg_time min_time max_time clients queries_per_client" | sed 's/ /	/g' | paste - $< > $@
 	# Sort output by max_time, min_time, avg_time, query_file
-	@cat $(SUMMARY_RESULTS) | sort -g -k 6 -k 5 -k 4 -nk 1 -t$$'\t' -r >> $@
+	@cat $(SUMMARY_RESULTS) | sort -k 6g -k 5g -k 4g -k 1n -t$$'\t' -r >> $@
 
 test/tmp/query/%explain_header.csv: $(EXPLAIN_QUERY_RESULTS)
 	@mkdir -p $(dir $@)
