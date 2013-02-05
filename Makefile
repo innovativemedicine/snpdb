@@ -71,8 +71,10 @@ test/tmp/query/%.summary.csv: test/out/query/%.mysqlslap.csv test/out/query/%.ex
 $(SUMMARY_FILE): test/tmp/query/$(SCHEMA_FILENAME)/explain_header.csv $(SUMMARY_RESULTS) 
 	# Ignore files that don't exist because their queries were empty
 	@echo "query_file unknown load_type avg_time min_time max_time clients queries_per_client" | sed 's/ /	/g' | paste - $< > $@
-	# Sort output by max_time, min_time, avg_time, query_file
-	@cat $(SUMMARY_RESULTS) | sort -k 6g -k 5g -k 4g -k 1n -t$$'\t' -r >> $@
+	# Sort output by query_file, max_time, min_time, avg_time
+	@# NOTE: mysqlslap might just output an error message, so we need to sort by query_file first to
+	@# group lines together properly
+	@cat $(SUMMARY_RESULTS) | sort -t$$'\t' -k 1,1 -k 6g,6 -k 5g,5 -k 4g,4 >> $@
 
 test/tmp/query/%explain_header.csv: $(EXPLAIN_QUERY_RESULTS)
 	@mkdir -p $(dir $@)
