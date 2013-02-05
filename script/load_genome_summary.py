@@ -25,9 +25,11 @@ def main():
     parser.add_argument("--records", type=int, help="skip line counting input files, and use --records as the total number of lines in the input files")
     parser.add_argument("--threads", type=int, default=1, help="split input into --threads chunks")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
-    parser.add_argument("--buffer", type=int, required=False, help="size of the buffer for dividing input amongst threads (lower this if you're thrashing; the default is the maximum semaphore value for your OS)")
+    parser.add_argument("--buffer", type=int, required=False, help="size of the buffer for dividing input amongst threads (lower this if you're thrashing; if left to the default, it is multiplied by --threads)")
     parser.add_argument("--profile", help="run yappi and output profiling results to --profile")
     args = parser.parse_args()
+    thread_buffer_default = 1000
+    args.buffer = thread_buffer_default * min(1, args.threads)
 
     if args.profile is not None:
         import yappi
@@ -183,17 +185,17 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
 
         row = [None if f == '' else f for f in row] 
 
-        info = vcf.parse('info', row[47 - 1])
+        info = vcf.parse('info', row[35 - 1])
         vc_group_columns = {
             'chromosome'  : row[22 - 1],
             'start_posn'  : row[23 - 1],
             'end_posn'    : row[24 - 1],
             'ref'         : vcf.parse('ref', row[25 - 1]),
-            'dbsnp_id'    : vcf.parse('dbsnp_id', row[42 - 1]),
+            'dbsnp_id'    : vcf.parse('dbsnp_id', row[30 - 1]),
 
-            # 'genotype_format' : row[48 - 1],
-            'quality'         : row[45 - 1],
-            'filter'          : row[46 - 1],
+            # 'genotype_format' : row[36 - 1],
+            'quality'         : row[33 - 1],
+            'filter'          : row[34 - 1],
 
             # annovar columns
             'otherinfo'               : row[27 - 1],
@@ -221,7 +223,7 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
             'ljb_mutationtaster'      : row[19 - 1],
 
             # vc_group_info columns
-            # 'info_source'       : row[48 - 1],
+            # 'info_source'       : row[36 - 1],
             'ds'                : info.get('DS', False),
             'inbreeding_coeff'  : info.get('InbreedingCoeff'),
             'base_q_rank_sum'   : info.get('BaseQRankSum'),
@@ -241,7 +243,7 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
         }
         insert(vc_group_table, vc_group_columns)
 
-        alts = vcf.parse('alts', row[44 - 1])
+        alts = vcf.parse('alts', row[32 - 1])
 
         # for each vc_group_allele in (vc x alt alleles in vc_group)
         vc_group_allele_fields = [
@@ -257,13 +259,13 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
 
         vc_columns = {
             'vc_group_id' : vc_group_table.lastrowid,
-            'zygosity'    : row[39 - 1],
+            'zygosity'    : row[27 - 1],
         }
 
         ref_and_alts = as_list(vc_group_columns['ref']) + alts
 
         # for each vc in vc_group
-        for genotype in [vcf.parse('genotype', row[gf]) for gf in xrange(49 - 1, 60)]:
+        for genotype in [vcf.parse('genotype', row[gf]) for gf in xrange(37 - 1, 48)]:
             # vc_columns['genotype_source'] = row[gf]
 
             patient_columns = {
