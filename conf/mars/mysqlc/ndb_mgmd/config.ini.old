@@ -1,0 +1,25 @@
+[ndb_mgmd]
+hostname=localhost
+datadir=/home/james/mysql-cluster/data/ndb
+NodeId=1
+
+[ndbd default]
+noofreplicas=2
+DataMemory=6730045697
+IndexMemory=611822336
+# DataMemory=13460091392
+# IndexMemory=1223644672
+datadir=/home/james/mysql-cluster/data/ndb
+# http://johanandersson.blogspot.ca/2008/04/great-configini.html
+MaxNoOfConcurrentOperations=200000
+
+[ndbd]
+hostname=localhost
+NodeId=3
+
+[ndbd]
+hostname=localhost
+NodeId=4
+
+[mysqld]
+NodeId=50

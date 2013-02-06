@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import os
 from os import environ, path
 from jinja2 import Environment, FileSystemLoader
 
@@ -14,8 +15,19 @@ def main():
         args.out = root if ext == '.jinja' else args.template_file + '.out'
 
     env = Environment(loader = FileSystemLoader('./'))
-    with open(args.out, 'w') as f:
-        f.write(env.get_template(args.template_file).render(environ))
+
+    import re
+    modules = {
+            're': re,
+            }
+
+    modules.update(environ)
+    try:
+        with open(args.out, 'w') as f:
+            f.write(env.get_template(args.template_file).render(modules))
+    except:
+        os.remove(args.out)
+        raise
 
 if __name__ == '__main__':
     main()

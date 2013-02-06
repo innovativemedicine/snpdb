@@ -1,7 +1,17 @@
 MYSQL := mysql
-MYSQL_CLUSTERDB_OPTS_REMOTE := --user root --port 4000 --host 127.0.0.1
-MYSQL_CLUSTERDB_OPTS_LOCAL := --user root
-MYSQL_CLUSTERDB_OPTS := $(MYSQL_CLUSTERDB_OPTS_REMOTE)
+
+MYSQL_CLUSTERDB_LOCAL_PORT := 5000
+MYSQL_CLUSTERDB_LOCAL_USER := root 
+MYSQL_CLUSTERDB_LOCAL_HOST := 127.0.0.1
+MYSQL_CLUSTERDB_OPTS_LOCAL := --user $(MYSQL_CLUSTERDB_LOCAL_USER) --port $(MYSQL_CLUSTERDB_LOCAL_PORT) --host $(MYSQL_CLUSTERDB_LOCAL_HOST)
+
+MYSQL_CLUSTERDB_REMOTE_PORT := 4000 
+MYSQL_CLUSTERDB_REMOTE_USER := root 
+MYSQL_CLUSTERDB_REMOTE_HOST := 127.0.0.1
+MYSQL_CLUSTERDB_OPTS_REMOTE := --user $(MYSQL_CLUSTERDB_REMOTE_USER) --port $(MYSQL_CLUSTERDB_REMOTE_PORT) --host $(MYSQL_CLUSTERDB_REMOTE_HOST)
+
+MYSQL_CLUSTERDB_OPTS := $(MYSQL_CLUSTERDB_OPTS_LOCAL)
+
 CLUSTERDB_NAME := clusterdb
 CLUSTERDB_FILE := PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv
 CLUSTERDB_SCHEMA := src/sql/schema-vc-and-vc_group.sql
@@ -30,3 +40,5 @@ export max_start_posn := 249239759
 # mysqlslap parameters
 export iterations := 10 # Number of times to run the tests
 export concurrency := 2 # Number of clients to simulate for query to run 
+
+include innodb_config.mk
