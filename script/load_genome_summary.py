@@ -5,6 +5,7 @@ import vcf
 import sql
 
 import sys
+import inspect
 # import MySQLdb
 import oursql
 import csv
@@ -27,6 +28,7 @@ def main():
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
     parser.add_argument("--buffer", type=int, required=False, help="size of the buffer for dividing input amongst threads (lower this if you're thrashing; if left to the default, it is multiplied by --threads)")
     parser.add_argument("--profile", help="run yappi and output profiling results to --profile")
+    parser.add_argument("--autocommit", action="store_true", help="SET autocommit = 1 (good for ndb, bad for innodb)")
     args = parser.parse_args()
     thread_buffer_default = 1000
     args.buffer = thread_buffer_default * min(1, args.threads)
@@ -53,6 +55,7 @@ def main():
             # empty input
             pass
 
+
     if args.threads > 1:
         load_genome_summary_parallel(input, records, pbar, args)
     else:
@@ -67,11 +70,7 @@ def main():
         load_genome_summary(
                 connect(args), 
                 sequential_input(),
-                delim=args.delim,
-                quote=args.quote,
-                dry_run=args.dry_run,
-                records=records,
-                quiet=args.quiet)
+                **lgs_kwargs(args))
 
     pbar.finish()
 
@@ -95,6 +94,11 @@ def connect(args):
             db=args.db,
             raise_on_warnings=False)
 
+# args that are kwargs to load_genome_summary
+def lgs_kwargs(args):
+    spec = inspect.getargspec(load_genome_summary)
+    return dict((k, getattr(args, k)) for k in spec.args[len(spec.args)-len(spec.defaults):])
+
 def load_genome_summary_parallel(input, records, pbar, args):
     queues = [Queue(args.buffer) if args.buffer is not None else Queue() for i in xrange(args.threads)]
     l = Lock()
@@ -116,11 +120,7 @@ def load_genome_summary_parallel(input, records, pbar, args):
             Process(target=load_genome_summary, 
                     args=(connect(args), 
                           queue_input(q)), 
-                    kwargs=dict(delim=args.delim,
-                                quote=args.quote,
-                                dry_run=args.dry_run,
-                                records=records,
-                                quiet=args.quiet))
+                    kwargs=lgs_kwargs(args))
                     for q in queues]
 
     for p in processes:
@@ -140,7 +140,7 @@ def load_genome_summary_parallel(input, records, pbar, args):
     for p in processes:
         p.join()
 
-def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=None, quiet=False):
+def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=None, quiet=False, autocommit=False):
     # this script will run properly on InnoDB engine without autocommit; sadly, such is not the case for NDB, where we get 
     # the error:
     # Got temporary error 233 'Out of operation records in transaction coordinator (increase MaxNoOfConcurrentOperations)' from NDBCLUSTER 
@@ -167,7 +167,10 @@ def load_genome_summary(db, input, delim=",", quote='"', dry_run=False, records=
         return check_arity_zip(args, error.format(lineno=1, table=table.name, key=key))
 
     c = db.cursor()
-    c.execute("""SET autocommit = 1;""")
+    if autocommit:
+        c.execute("""SET autocommit = 1;""")
+    else:
+        c.execute("""SET autocommit = 0;""")
 
     csv_input = csv.reader(input, delimiter=delim, quotechar=quote)
 
