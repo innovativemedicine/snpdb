@@ -51,7 +51,8 @@ stats/%/$(CLUSTERDB_FILE_NAME)/db_size_summary.csv: \
 		<(echo input_file; echo $(CLUSTERDB_FILE_NAME)) \
 		<(echo file_size; du -b -c $(CLUSTERDB_FILE) | awk 'END { print $$1 }') \
 		<(echo file_records; tail -n +2 $(CLUSTERDB_FILE) | wc -l | awk '{ print $$1 }') \
-		<(echo datadir_size; echo $(call GET_TOTAL_SIZE,$(BACKUP_FILE))) \
+		<(echo datadir_size; echo $$(( $(call GET_TOTAL_SIZE,$(BACKUP_FILE)) + $(call GET_TOTAL_SIZE,$(BINLOG_FILE)) + $(call GET_TOTAL_SIZE,$(OTHER_FILE)) )) ) \
+		<(echo backup_size; echo $(call GET_TOTAL_SIZE,$(BACKUP_FILE))) \
 		<(echo binlog_size; echo $(call GET_TOTAL_SIZE,$(BINLOG_FILE))) \
 		<(echo other_size; echo $(call GET_TOTAL_SIZE,$(OTHER_FILE))) \
 		> $@

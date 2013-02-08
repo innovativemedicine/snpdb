@@ -1,0 +1,4 @@
+input_file	file_size	file_records	datadir_size	backup_size	binlog_size	other_size	file_size_divby_file_records	datadir_size_divby_file_records	backup_size_divby_file_records	binlog_size_divby_file_records	other_size_divby_file_records
+Project_Charames_TruSight_Cancer_Panel.130117.raw.snps.genome_summary.csv	5479566	8984	1137718172	1008970199	128035014	712959	609.924977738201	126638.264915405	112307.457591273	14251.4485752449	79.3587488869101
+Project_Charames_TruSight_Cardiomyopathy.130118.raw.snps.genome_summary.csv	2009642	3258	1008880290	961096151	47071180	712959	616.833026396562	309662.458563536	294995.749232658	14447.8759975445	218.833333333333
+Project_Jordan.130109.recal.filtered.snps.genome_summary.csv	336209234	536343	13841413987	6101903831	7738746350	763806	626.854893230638	25807.0189915782	11376.8685915543	14428.7263001475	1.42409987638507

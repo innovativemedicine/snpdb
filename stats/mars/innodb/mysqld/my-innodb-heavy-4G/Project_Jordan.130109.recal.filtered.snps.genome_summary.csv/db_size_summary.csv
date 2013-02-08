@@ -1,2 +1,2 @@
-input_file	file_size	file_records	datadir_size	binlog_size	other_size
-Project_Jordan.130109.recal.filtered.snps.genome_summary.csv	336209234	536343	6101903831	7738746350	763806
+input_file	file_size	file_records	datadir_size	backup_size	binlog_size	other_size
+Project_Jordan.130109.recal.filtered.snps.genome_summary.csv	336209234	536343	13841413987	6101903831	7738746350	763806
