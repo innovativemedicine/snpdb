@@ -14,6 +14,7 @@ MYSQL_CLUSTERDB_OPTS := $(MYSQL_CLUSTERDB_OPTS_LOCAL)
 
 CLUSTERDB_NAME := clusterdb
 CLUSTERDB_FILE := PBC.121029.hg19_ALL.sites.2011_05_filtered.genome_summary.csv
+CLUSTERDB_FILE_NAME := $(notdir $(CLUSTERDB_FILE))
 CLUSTERDB_SCHEMA := src/sql/schema-vc-and-vc_group.sql
 SCHEMA_FILENAME = $(patsubst %.sql,%,$(notdir $(CLUSTERDB_SCHEMA)))
 CLUSTERDB_ENGINE := NDB
