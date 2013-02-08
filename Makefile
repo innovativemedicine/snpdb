@@ -6,6 +6,8 @@ TESTS := $(ROOT)/test
 PYTHON := python
 export PYTHON ROOT MAKE_SCRIPTS
 
+all: src/vcf/vcfparser.py
+
 include config.mk
 
 VCFPARSER = lib/python/pyvcf/src/vcf/vcfparser.py
@@ -15,8 +17,6 @@ export VCFPARSER
 RENDER = $(SCRIPTS)/render.py
 
 .PHONY: all testparse
-
-all: src/vcf/vcfparser.py
 
 help:
 	@$(MAKE_SCRIPTS)/usage.py

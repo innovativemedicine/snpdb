@@ -1,0 +1,7 @@
+Name	Engine	Version	Row_format	Rows	Avg_row_length	Data_length	Max_data_length	Index_length	Data_free	Auto_increment	Create_time	Update_time	Check_time	Collation	Checksum	Create_options	Comment
+patient	InnoDB	10	Compact	6425911	27	176914432	0	0	4194304	6436117	2013-02-07 15:23:37	NULL	NULL	latin1_swedish_ci	NULL		
+vc	InnoDB	10	Compact	4675040	65	304988160	0	809664512	6291456	4802139	2013-02-07 15:23:37	NULL	NULL	latin1_swedish_ci	NULL		
+vc_allele	InnoDB	10	Compact	5523939	188	1040187392	0	0	4194304	NULL	2013-02-07 15:23:39	NULL	NULL	latin1_swedish_ci	NULL		
+vc_genotype	InnoDB	10	Compact	17008097	96	1633681408	0	0	7340032	NULL	2013-02-07 15:23:40	NULL	NULL	latin1_swedish_ci	NULL		
+vc_group	InnoDB	10	Compact	534903	197	105562112	0	0	5242880	536344	2013-02-07 15:23:36	NULL	NULL	latin1_swedish_ci	NULL		
+vc_group_allele	InnoDB	10	Compact	555853	114	63619072	0	0	4194304	NULL	2013-02-07 15:23:36	NULL	NULL	latin1_swedish_ci	NULL		
