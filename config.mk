@@ -43,3 +43,4 @@ export iterations := 10 # Number of times to run the tests
 export concurrency := 2 # Number of clients to simulate for query to run 
 
 include innodb_config.mk
+include yum_config.mk
