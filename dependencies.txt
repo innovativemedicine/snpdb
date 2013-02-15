@@ -1,0 +1,9 @@
+A: already installed
+
+yum dependencies:
+yum-utils (A)
+createrepo
+patch
+
+external rpm dependencies:
+lighttpd (rpmforge)

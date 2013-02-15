@@ -24,7 +24,7 @@ def main():
     modules.update(environ)
     try:
         with open(args.out, 'w') as f:
-            f.write(env.get_template(args.template_file).render(modules))
+            print >>f, env.get_template(args.template_file).render(modules)
     except:
         os.remove(args.out)
         raise

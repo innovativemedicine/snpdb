@@ -4,7 +4,8 @@ SCRIPTS := $(ROOT)/script
 MAKE_SCRIPTS := $(SCRIPTS)/makefile
 TESTS := $(ROOT)/test
 PYTHON := python
-export PYTHON ROOT MAKE_SCRIPTS
+PATCH_DIR := conf/common/patch
+export PYTHON ROOT MAKE_SCRIPTS PATCH_DIR
 
 all: src/vcf/vcfparser.py
 
