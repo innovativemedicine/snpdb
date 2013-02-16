@@ -1,4 +1,4 @@
-*** {{ SYSTEM_NETWORK_FILE }}	2013-02-15 16:33:59.642234408 -0500
+*** {{ NETWORK_SYSFILE }}	2013-02-15 16:33:59.642234408 -0500
 --- conf/common/patch/network.new	2013-02-15 16:16:38.008314884 -0500
 ***************
 *** 1,3 ****
@@ -8,4 +8,4 @@
 --- 1,3 ----
   NETWORKING=yes
   NETWORKING_IPV6=no
-! HOSTNAME={{ WORKER_HOSTNAME }}.localdomain
+! HOSTNAME={{ WORKER_BASE_HOSTNAME }}.localdomain

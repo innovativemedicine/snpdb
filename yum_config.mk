@@ -7,7 +7,7 @@ export YUM_REPO_DOCUMENT_ROOT := $(HOME)/$(YUM_REPO_RELATIVE_DOCUMENT_ROOT)
 # initialize directories if they don't already exist
 $(eval $(shell mkdir -p $(YUM_REPO_DOCUMENT_ROOT)/repodata))
 
-export RPM_BINARY_DIRS := $(shell find $(YUM_REPO_DOCUMENT_ROOT) -name '*.rpm' | xargs -d '\n' -n 1 dirname | sort --unique)
+export RPM_BINARY_DIRS := $(shell find $(YUM_REPO_DOCUMENT_ROOT) -name '*.rpm' | xargs -n 1 dirname | sort --unique)
 export REPO_DIRS := $(addprefix $(YUM_REPO_DOCUMENT_ROOT)/,cloudera-cdh4 cloudera-impala)
 export YUM_REPODATA_FILES := $(addprefix $(YUM_REPO_DOCUMENT_ROOT)/repodata/,filelists.xml.gz other.xml.gz primary.xml.gz repomd.xml)
 export YUM_REPO_PORT := 45454
@@ -21,7 +21,10 @@ export SYSTEM_IMPALA_REPO_CONF := $(YUM_SYSTEM_REPO_CONF_DIR)/$(notdir $(IMPALA_
 RPM := 
 RPM_BASEARCH = $(shell sed 's/.*\.\([^\.]\+\).rpm/\1/' <<<"$(RPM)")
 
-%: %.jinja yum_config.mk
+%.patch: %.old %.new
+	diff -c -B $*.old $*.new -L $($(shell perl -pe 's/.*?([^\/]+).old$$/\U\1_SYSFILE/' <<<"$*.old")) > $@ || test $$? = 1
+
+%:: %.jinja yum_config.mk
 	$(RENDER) $<
 
 $(SYSTEM_IMPALA_REPO_CONF): $(IMPALA_REPO_CONF)
@@ -79,20 +82,34 @@ import_cloudera_repos: import_cdh4_repo import_impala_repo
 
 ## Group install daemon packages, aliased by their role in the cluster (implements the note above)
 
-export SYSTEM_NETWORK_FILE := /etc/sysconfig/network
+# system files to patch; these are used by the %.patch pattern
+export NETWORK_SYSFILE := /etc/sysconfig/network
+export HOSTS_SYSFILE := /etc/hosts
+
 export CURRENT_HOSTNAME := $(shell hostname -f)
 
-export MASTER_HOSTNAME_SUFFIX := 
-export MASTER_HOSTNAME := master$(MASTER_HOSTNAME_SUFFIX)
-install_master: install_namenode install_jobtracker $(PATCH_DIR)/network_master.patch
-	sudo hostname $(MASTER_HOSTNAME)
-	sudo patch -p0 -i $(PATCH_DIR)/network_master.patch
+# Apply a list of patch files, checking that they all patch sucessfully first
+# $1 - space separated patch files
+define PATCH_SYSFILE 
+	# check that the patch will succeed before we actually go ahead applying it
+	cat $(addprefix $(PATCH_DIR)/,$(1)) | patch -p0 --dry-run
+	# ok, apply the patch
+	cat $(addprefix $(PATCH_DIR)/,$(1)) | sudo patch -p0
+endef
 
-export WORKER_HOSTNAME_SUFFIX := 
-export WORKER_HOSTNAME := worker$(WORKER_HOSTNAME_SUFFIX)
-install_worker: install_datanode $(PATCH_DIR)/network_worker.patch
-	sudo hostname $(WORKER_HOSTNAME)
-	sudo patch -p0 -i $(PATCH_DIR)/network_worker.patch
+export MASTER_IP_ADDR := 192.168.1.112
+export MASTER_BASE_HOSTNAME := master
+install_master: install_namenode install_jobtracker $(PATCH_DIR)/network_master.patch $(PATCH_DIR)/hosts.patch
+	sudo hostname $(MASTER_BASE_HOSTNAME)
+	$(call PATCH_SYSFILE,network_master.patch hosts.patch)
+
+export WORKER_BASE_IP_ADDR := 192.168.1
+export WORKER_STARTING_IP := 112
+export NUM_WORKERS := 1
+export WORKER_BASE_HOSTNAME := worker
+install_worker: install_datanode $(PATCH_DIR)/network_worker.patch $(PATCH_DIR)/hosts.patch
+	sudo hostname $(WORKER_BASE_HOSTNAME)
+	$(call PATCH_SYSFILE,network_worker.patch hosts.patch)
 
 ## Daemon packages
 
