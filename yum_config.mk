@@ -21,9 +21,6 @@ export SYSTEM_IMPALA_REPO_CONF := $(YUM_SYSTEM_REPO_CONF_DIR)/$(notdir $(IMPALA_
 RPM := 
 RPM_BASEARCH = $(shell sed 's/.*\.\([^\.]\+\).rpm/\1/' <<<"$(RPM)")
 
-%.patch: %.old %.new
-	diff -c -B $*.old $*.new -L $($(shell perl -pe 's/.*?([^\/]+).old$$/\U\1_SYSFILE/' <<<"$*.old")) > $@ || test $$? = 1
-
 %:: %.jinja yum_config.mk
 	$(RENDER) $<
 
@@ -82,34 +79,11 @@ import_cloudera_repos: import_cdh4_repo import_impala_repo
 
 ## Group install daemon packages, aliased by their role in the cluster (implements the note above)
 
-# system files to patch; these are used by the %.patch pattern
-export NETWORK_SYSFILE := /etc/sysconfig/network
-export HOSTS_SYSFILE := /etc/hosts
-
 export CURRENT_HOSTNAME := $(shell hostname -f)
 
-# Apply a list of patch files, checking that they all patch sucessfully first
-# $1 - space separated patch files
-define PATCH_SYSFILE 
-	# check that the patch will succeed before we actually go ahead applying it
-	cat $(addprefix $(PATCH_DIR)/,$(1)) | patch -p0 --dry-run
-	# ok, apply the patch
-	cat $(addprefix $(PATCH_DIR)/,$(1)) | sudo patch -p0
-endef
+install_master: install_namenode install_jobtracker 
 
-export MASTER_IP_ADDR := 192.168.1.112
-export MASTER_BASE_HOSTNAME := master
-install_master: install_namenode install_jobtracker $(PATCH_DIR)/network_master.patch $(PATCH_DIR)/hosts.patch
-	sudo hostname $(MASTER_BASE_HOSTNAME)
-	$(call PATCH_SYSFILE,network_master.patch hosts.patch)
-
-export WORKER_BASE_IP_ADDR := 192.168.1
-export WORKER_STARTING_IP := 112
-export NUM_WORKERS := 1
-export WORKER_BASE_HOSTNAME := worker
-install_worker: install_datanode $(PATCH_DIR)/network_worker.patch $(PATCH_DIR)/hosts.patch
-	sudo hostname $(WORKER_BASE_HOSTNAME)
-	$(call PATCH_SYSFILE,network_worker.patch hosts.patch)
+install_worker: install_datanode
 
 ## Daemon packages
 
@@ -133,3 +107,108 @@ install_datanode:
 
 install_client:
 	sudo yum install hadoop-0.20-mapreduce-tasktracker hadoop-hdfs-datanode 
+
+## Master/worker configuration
+
+export DFS_NAME_DIRS := /data/1/dfs/nn
+# TODO: "Cloudera recommends that you specify at least two directories. One of these should be 
+# located on an NFS mount point, unless you will be using a High Availability (HA) 
+# configuration." (e.g. /data/1/dfs/nn,/nfsmount/dfs/nn)
+export HDFS_DFS_NAME_DIR = $(subst $(space),$(comma),$(DFS_NAME_DIRS))
+export HDFS_DFS_PERMISSIONS_SUPERUSERGROUP := hadoop
+export HDFS_USER := hdfs
+# NOTE:  "Cloudera recommends that you configure the disks on the DataNode in a JBOD 
+# configuration, mounted at /data/1/ through /data/N, and configure dfs.data.dir or 
+# dfs.datanode.data.dir to specify /data/1/dfs/dn through /data/N/dfs/dn/."
+export HDFS_NUM_DFS_DATA_DIRS := 3
+
+# Return the the dfs data directories, separated by a delimeter
+# $1 - the delimiter to use
+DFS_NAME_DIR_PREFIX := /data
+DELIMITED_DFS_DATA_DIRS = $(shell python -c 'print "$(1)".join("$(DFS_NAME_DIR_PREFIX)/%s/dfs/dn" % (i+1) for i in range($(HDFS_NUM_DFS_DATA_DIRS)))')
+
+export HDFS_DFS_DATA_DIR := $(call DELIMITED_DFS_DATA_DIRS,$(comma))
+DFS_DATA_DIRS = $(call DELIMITED_DFS_DATA_DIRS,$(space))
+define DEPLOY_HDFS
+	sudo cp -r /etc/hadoop/conf.empty /etc/hadoop/conf.my_cluster
+	sudo alternatives --verbose --install /etc/hadoop/conf hadoop-conf /etc/hadoop/conf.my_cluster 50
+	sudo alternatives --set hadoop-conf /etc/hadoop/conf.my_cluster
+endef
+
+define MK_HDFS_DIR
+	sudo mkdir -p $@
+	sudo chown -R $(HDFS_USER):$(HDFS_USER) $@
+	sudo chmod go-rx $@
+endef
+$(DFS_NAME_DIR_PREFIX) $(DFS_NAME_DIRS): configure_master
+	$(call MK_HDFS_DIR)
+$(DFS_DATA_DIRS): configure_worker
+	$(call MK_HDFS_DIR)
+
+# Apply a list of patch files, checking that they all patch sucessfully first
+# $1 - space separated patch files
+define PATCH_SYSFILE 
+	# check that the patch will succeed before we actually go ahead applying it
+	cat $(addprefix $(PATCH_DIR)/,$(1)) | patch -p0 --dry-run
+	# ok, apply the patch
+	cat $(addprefix $(PATCH_DIR)/,$(1)) | sudo patch -p0
+endef
+
+# $1 - suffix
+define PATCH_RULE
+%$1.patch: %.old %$1.new
+	diff -c -B $$*.old $$*$1.new -L $$($$(shell perl -pe 's/.*?([^\/]+$1).new$$$$/\U\1_SYSFILE/; s/-/_/g' <<<"$$*$1.new")) > $$@ || test $$$$? = 1
+endef
+
+$(eval $(call PATCH_RULE,))
+$(eval $(call PATCH_RULE,_master))
+$(eval $(call PATCH_RULE,_worker))
+
+%_master.new: %_master.new.jinja yum_config.mk %_common.new.jinja 
+	$(RENDER) $<
+
+%_worker.new: %_worker.new.jinja yum_config.mk %_common.new.jinja 
+	$(RENDER) $<
+
+# system files to patch; these are used by the %.patch patterns
+export NETWORK_SYSFILE := /etc/sysconfig/network
+export HOSTS_SYSFILE := /etc/hosts
+export HDFS_CONF_DIR := /etc/hadoop/conf.my_cluster
+export HDFS_SITE_SYSFILE := $(HDFS_CONF_DIR)/hdfs-site.xml
+export HDFS_SITE_WORKER_SYSFILE := $(HDFS_SITE_SYSFILE)
+export HDFS_SITE_MASTER_SYSFILE := $(HDFS_SITE_SYSFILE)
+export CORE_SITE_SYSFILE := $(HDFS_CONF_DIR)/core-site.xml
+SHARED_PATCHES := hosts.patch hdfs/core-site.patch 
+NODE_SPECIFIC_PATCHES := network.patch hdfs/hdfs-site.patch
+
+export MASTER_IP_ADDR := 192.168.1.112
+export MASTER_BASE_HOSTNAME := master
+export MASTER_HOSTNAME := $(MASTER_BASE_HOSTNAME)
+MASTER_PATCHES = $(patsubst %.patch,%_master.patch,$(NODE_SPECIFIC_PATCHES)) $(SHARED_PATCHES)
+
+configure_master: install_master $(addprefix $(PATCH_DIR)/,$(MASTER_PATCHES))
+	sudo hostname $(MASTER_HOSTNAME)
+	# deploy hdfs
+	$(call DEPLOY_HDFS)
+	$(call PATCH_SYSFILE,$(MASTER_PATCHES))
+	# format hdfs namenode
+	sudo -u $(HDFS_USER) hadoop namenode -format
+
+export WORKER_BASE_IP_ADDR := 192.168.1
+export WORKER_STARTING_IP := 112
+export NUM_WORKERS := 1
+export WORKER_ID := 0
+export WORKER_BASE_HOSTNAME := worker
+export WORKER_HOSTNAME := $(WORKER_BASE_HOSTNAME)$(WORKER_ID)
+WORKER_PATCHES = $(patsubst %.patch,%_worker.patch,$(NODE_SPECIFIC_PATCHES)) $(SHARED_PATCHES)
+
+configure_worker: install_worker $(PATCH_DIR)/network_worker.patch $(addprefix $(PATCH_DIR)/,$(WORKER_PATCHES))
+	sudo hostname $(WORKER_HOSTNAME)
+	# deploy hdfs
+	$(call DEPLOY_HDFS)
+	$(call PATCH_SYSFILE,$(WORKER_PATCHES))
+
+## Convenience rules for starting the master/work setup process
+
+setup_worker: $(DFS_DATA_DIRS)
+setup_master: $(DFS_NAME_DIR_PREFIX) $(DFS_NAME_DIRS)

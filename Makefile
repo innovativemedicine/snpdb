@@ -1,4 +1,8 @@
 # NOTE: run "make help" for basic usage info
+comma:= ,
+empty:=
+space:= $(empty) $(empty)
+
 ROOT := .
 SCRIPTS := $(ROOT)/script
 MAKE_SCRIPTS := $(SCRIPTS)/makefile

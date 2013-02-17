@@ -1,0 +1,7 @@
+{% extends "conf/common/patch/hdfs/hdfs-site_common.new.jinja" %}
+{% block node_specific %}
+    <property>
+        <name>dfs.data.dir</name>
+        <value>{{ HDFS_DFS_DATA_DIR }}</value>
+    </property>
+{% endblock %}

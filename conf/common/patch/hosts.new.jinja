@@ -1,4 +1,4 @@
-{{ MASTER_IP_ADDR }}	{{ MASTER_BASE_HOSTNAME }}.localdomain	{{ MASTER_BASE_HOSTNAME }}
+{{ MASTER_IP_ADDR }}	{{ MASTER_HOSTNAME }}.localdomain	{{ MASTER_HOSTNAME }}
 {% for i in range(NUM_WORKERS|int) -%}
 {% set worker_base_ip = WORKER_STARTING_IP|int + i -%}
 {{ WORKER_BASE_IP_ADDR }}.{{ worker_base_ip }}	{{ WORKER_BASE_HOSTNAME }}{{ i }}.localdomain	{{ WORKER_BASE_HOSTNAME }}{{ i }}
