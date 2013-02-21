@@ -14,7 +14,7 @@ def main():
         root, ext = path.splitext(args.template_file)
         args.out = root if ext == '.jinja' else args.template_file + '.out'
 
-    env = Environment(loader = FileSystemLoader('./'))
+    env = Environment(loader = FileSystemLoader(['./', '/']))
 
     import re
     modules = {
