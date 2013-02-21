@@ -44,3 +44,4 @@ export concurrency := 2 # Number of clients to simulate for query to run
 
 include innodb_config.mk
 include yum_config.mk
+include puppet.mk

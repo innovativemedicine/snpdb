@@ -3,7 +3,7 @@ comma:= ,
 empty:=
 space:= $(empty) $(empty)
 
-ROOT := .
+ROOT := $(abspath .)
 SCRIPTS := $(ROOT)/script
 MAKE_SCRIPTS := $(SCRIPTS)/makefile
 TESTS := $(ROOT)/test
