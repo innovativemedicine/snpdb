@@ -9,7 +9,9 @@
 # $worker_hostname      = $snpdb::params::worker_hostname
 
 class snpdb::worker(
-    $master_hostname      = $snpdb::params::master_hostname
+    $master_hostname      = $snpdb::params::master_hostname,
+    $cdh_version = $snpdb::params::cdh_version,
+    $cm_version = $snpdb::params::cm_version
 ) inherits snpdb::params {
     # host { $master_hostname:
     #     ip           => $master_ip,
@@ -24,7 +26,12 @@ class snpdb::worker(
     class { 'snpdb::hosts': } ->
     class { 'cloudera':
         cm_server_host => $master_hostname,
-    }
+        cdh_version => $cdh_version,
+        cm_version  => $cm_version,
+    } ->
+    class { 'snpdb::common::perms': }
+    # already declared by cdh
+    # class { 'cloudera::cdh::hue::plugins': }
 }
 
 class { 'snpdb::worker': }

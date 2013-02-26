@@ -10,7 +10,13 @@
 # $worker_base_hostname = $snpdb::params::worker_base_hostname,
 # $worker_hostname      = $snpdb::params::worker_hostname
 
-class snpdb::master inherits snpdb::params {
+class snpdb::master(
+    $cdh_version = $snpdb::params::cdh_version,
+    $cm_version = $snpdb::params::cm_version,
+    $hive_metastore_password = $snpdb::params::hive_metastore_password,
+    $hive_metastore_db = $snpdb::params::hive_metastore_db,
+    $hive_metastore_user = $snpdb::params::hive_metastore_user
+) inherits snpdb::params {
     # host { $master_hostname:
     #     ip => $master_ip,
     # } ->
@@ -37,13 +43,23 @@ class snpdb::master inherits snpdb::params {
         # cm_version  => '4.1.3',
 
         # what the github repo has 'tested'
-        cdh_version => '4.1.2',
-        cm_version  => '4.1.2',
+        cdh_version => $cdh_version,
+        cm_version  => $cm_version,
 
     } ->
     class { 'cloudera::java': } ->
     class { 'cloudera::cm': } ->
-    class { 'cloudera::cm::server': }
+    class { 'cloudera::cm::server': } ->
+    class { 'cloudera::cdh::hue': } ->
+    package { 'hue-server':
+        ensure => 'present',
+    } ->
+    class { 'cloudera::cdh::hive::mysql': 
+        password      => $hive_metastore_password, 
+        database_name => $hive_metastore_db,
+        username      => $hive_metastore_user,
+    } ->
+    class { 'snpdb::common::perms': }
 }
 
 class { 'snpdb::master': }
