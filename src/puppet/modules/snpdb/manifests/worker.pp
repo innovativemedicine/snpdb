@@ -28,8 +28,8 @@ class snpdb::worker(
         cm_server_host => $master_hostname,
         cdh_version => $cdh_version,
         cm_version  => $cm_version,
-    } ->
-    class { 'snpdb::common::perms': }
+    }
+    # class { 'snpdb::common::perms': }
     # already declared by cdh
     # class { 'cloudera::cdh::hue::plugins': }
 }

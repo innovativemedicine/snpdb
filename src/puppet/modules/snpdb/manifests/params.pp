@@ -2,6 +2,9 @@ class snpdb::params {
     $hive_metastore_db = 'metastore'
     $hive_metastore_user = 'hive'
     $hive_metastore_password = '1000anag3r'
+    $hive_metastore_host = 'localhost'
+    # % doesn't work
+    $impala_statestore_host = 'localhost'
 
     $hdfs_user = 'hdfs'
     $hdfs_group = $hdfs_user

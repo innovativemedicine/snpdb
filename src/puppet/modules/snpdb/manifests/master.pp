@@ -54,12 +54,17 @@ class snpdb::master(
     package { 'hue-server':
         ensure => 'present',
     } ->
-    class { 'cloudera::cdh::hive::mysql': 
-        password      => $hive_metastore_password, 
-        database_name => $hive_metastore_db,
-        username      => $hive_metastore_user,
+    class { 'mysql::server': 
+        config_hash => { 'root_password' => $hive_metastore_password }
     } ->
-    class { 'snpdb::common::perms': }
+    class { 'snpdb::master::hive': }
+    # class { 'cloudera::cdh::hive::mysql': 
+    #     password      => $hive_metastore_password, 
+    #     database_name => $hive_metastore_db,
+    #     username      => $hive_metastore_user,
+    #     # require  => Class['mysql::config'],
+    # } ->
+    # class { 'snpdb::common::perms': }
 }
 
 class { 'snpdb::master': }

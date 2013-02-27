@@ -13,7 +13,7 @@ PUPPET_APPLY_CMD = $(call PUPPET_CMD,apply $1)
 # $1 - the name of the configuration, for which there exists a puppet manifest file in src/puppet/snpdb/manifests/
 define NODE_RULE
 puppet_$1: $(PUPPET_CONF)
-	$$(call PUPPET_APPLY_CMD,src/puppet/modules/snpdb/manifests/$1.pp)
+	$$(call PUPPET_APPLY_CMD,$(ROOT)/src/puppet/modules/snpdb/manifests/$1.pp)
 .PHONY: puppet_$1
 endef
 
