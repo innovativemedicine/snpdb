@@ -58,11 +58,13 @@ class snpdb::master(
         config_hash => { 'root_password' => $hive_metastore_password }
     } ->
     class { 'snpdb::master::hive': }
+    # class { 'cloudera::cdh::hive::server2': }
+
+
     # class { 'cloudera::cdh::hive::mysql': 
     #     password      => $hive_metastore_password, 
     #     database_name => $hive_metastore_db,
     #     username      => $hive_metastore_user,
-    #     # require  => Class['mysql::config'],
     # } ->
     # class { 'snpdb::common::perms': }
 }
