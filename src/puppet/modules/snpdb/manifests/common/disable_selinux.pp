@@ -8,4 +8,11 @@ class snpdb::common::disable_selinux {
         command => "/usr/sbin/setenforce 0",
         onlyif  => "/usr/sbin/selinuxenabled",
     }
+    # stop the firewall also; might want to add custom rules instead later...
+    service { "iptables":
+        ensure    => "stopped",
+        enable    => false,
+        hasstatus => true,
+        hasrestart => true,
+    }
 }

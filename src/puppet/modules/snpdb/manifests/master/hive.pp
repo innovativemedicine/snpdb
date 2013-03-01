@@ -9,6 +9,8 @@ class snpdb::master::hive (
     $hive_metastore_thrift_port = $snpdb::params::hive_metastore_thrift_port,
     $impala_statestore_host = $snpdb::params::impala_statestore_host,
     $zookeeper_hosts = $snpdb::params::zookeeper_hosts,
+    $master_hostname = $snpdb::params::master_hostname,
+    $master_ip = $snpdb::params::master_ip,
     $hive_version = '0.9.0'
 ) inherits snpdb::params {
     require cloudera::cdh::hive
@@ -62,6 +64,13 @@ class snpdb::master::hive (
         target => '/usr/share/java/mysql-connector-java.jar',
     }
 
+    class { 'mysql::server': 
+        config_hash => { 
+            'root_password' => $hive_metastore_password,
+            'bind_address' => '0.0.0.0'
+        }
+    }
+
     mysql::db { $hive_metastore_db:
         user     => $hive_metastore_user,
         password => $hive_metastore_password,
@@ -72,7 +81,16 @@ class snpdb::master::hive (
         require  => Class['mysql::config'],
     } 
 
+    # augeas { '/etc/my.cnf':
+    #     notify  => Service["mysqld"],
+    #     changes => "set /files/etc/my.cnf/target[*]/bind-address 0.0.0.0",
+    #     # require => Class['mysql::server'],
+    # }
+
     define hive_grant($host = $title) {
+        database_user { "$hive_metastore_user@$host":
+            password_hash => mysql_password($hive_metastore_password)
+        } ->
         database_grant { "$hive_metastore_user@$host/$hive_metastore_db":
             privileges => [ 'select_priv', 'insert_priv', 'update_priv', 'delete_priv', ],
             # Or specify individual privileges with columns from the mysql.db table:
@@ -81,9 +99,13 @@ class snpdb::master::hive (
         }
     }
     hive_grant { '%': }
-    if $hive_metastore_host != 'localhost' {
-        hive_grant { "$hive_metastore_host": }
-    }
+    # hive_grant { $master_hostname: }
+    # hive_grant { $worker_hostnames: }
+
+    # hive_grant { "$master_ip": }
+    # if $hive_metastore_host != 'localhost' {
+    #     hive_grant { "$hive_metastore_host": }
+    # }
     # hive_grant { 'localhost': }
 
     # database_grant { "$hive_metastore_user@$impala_statestore_host/$hive_metastore_db":

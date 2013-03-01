@@ -54,9 +54,9 @@ class snpdb::master(
     package { 'hue-server':
         ensure => 'present',
     } ->
-    class { 'mysql::server': 
-        config_hash => { 'root_password' => $hive_metastore_password }
-    } ->
+    # class { 'mysql::server': 
+    #     config_hash => { 'root_password' => $hive_metastore_password }
+    # } ->
     class { 'snpdb::master::hive': }
     # class { 'cloudera::cdh::hive::server2': }
 

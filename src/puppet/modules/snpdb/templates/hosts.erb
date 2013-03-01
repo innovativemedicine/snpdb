@@ -1,7 +1,7 @@
+<%= scope.lookupvar('snpdb::params::master_ip') %>	<%= scope.lookupvar('snpdb::params::master_hostname') %>.localdomain	<%= scope.lookupvar('snpdb::params::master_hostname') %>
 <% scope.lookupvar('snpdb::params::worker_ips').zip(scope.lookupvar('snpdb::params::worker_hostnames')).each do |ip, hostname| -%>
 <%= ip %>	<%= hostname %>.localdomain	<%= hostname %>
 <% end -%>
-<%= scope.lookupvar('snpdb::params::master_ip') %>	<%= scope.lookupvar('snpdb::params::master_hostname') %>.localdomain	<%= scope.lookupvar('snpdb::params::master_hostname') %>
 
 127.0.0.1		localhost.localdomain localhost
 ::1		localhost6.localdomain6 localhost6
