@@ -137,7 +137,9 @@ class snpdb::master::hive (
         "hive.metastore.uris", "thrift://${hive_metastore_host}:${hive_metastore_thrift_port}",
         # https://ccp.cloudera.com/display/CDH4DOC/Hive+Installation#HiveInstallation-ConfiguringHiveServer2
         "hive.support.concurrency", "true",
-        "hive.zookeeper.quorum", join($zookeeper_hosts, ",")
+        "hive.zookeeper.quorum", join($zookeeper_hosts, ","),
+        # default is /tmp/hive-${user.name}, we want to give hive its own /tmp/hive folder on hdfs though
+        "hive.exec.scratchdir", '/tmp/hive/hive-${user.name}'
     ) 
 
     # define print() {
