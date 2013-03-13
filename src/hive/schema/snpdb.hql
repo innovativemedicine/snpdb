@@ -254,7 +254,7 @@ CREATE TABLE variant (
             -- RMS mapping quality, similar to the version in the INFO field. (Integer) 
 
             -- unlabelled fields that I've tried to figure out
-            zygosity: string -- field #39
+            zygosity: string, -- field #39
 
             -- vc_group
             -- index (vc_group_id),
@@ -271,72 +271,72 @@ CREATE TABLE variant (
             -- foreign key (patient_id) references patient(id),
             -- primary key(id)
 
+            -- ref and alt alleles
+            alleles: array<
+                struct<
+
+                    -- BEGIN vc_allele fields
+
+                    -- vc_id: bigint, -- not null,
+                    -- if we ever have multiple groups for a vc, we need this
+                    -- vc_group_id bigint not null,
+                    allele: string,
+
+                    -- vcf 4.1 genotype fields
+
+                    -- AD (from vcf Project_PBC.121113.recal.filtered.snps.vcf):
+                    -- ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
+                    allelic_depth: int
+
+                    -- foreign key (vc_id) references vc(id),
+                    -- vc
+                    -- primary key (vc_id, allele)
+
+                    -- END vc_allele fields
+
+                >
+            >,
+
+            genotypes: array<
+                struct<
+
+                    -- BEGIN vc_genotype fields
+
+                    -- vc_id: bigint, -- not null,
+                    -- if we ever have multiple groups for a vc, we need this
+                    -- vc_group_id bigint not null,
+                    allele1: string,
+                    allele2: string,
+
+                    -- vcf 4.1 genotype fields
+
+                    -- PL:
+                    -- the phred-scaled genotype likelihoods rounded to the closest int (and otherwise defined 
+                    -- precisely as the GL field) (Integers)
+                    phred_likelihood: int
+
+                    -- vcf 4.1 genotype fields to be added later when needed
+
+                    -- GL:
+                    -- genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for 
+                    -- all possible genotypes given the set of alleles defined in the REF and ALT fields. In presence of 
+                    -- the GT field the same ploidy is expected and the canonical order is used; without GT field, 
+                    -- diploidy is assumed. If A is the allele in REF and B,C,... are the alleles as ordered in ALT, the 
+                    -- ordering of genotypes for the likelihoods is given by: F(j/k) = (k*(k+1)/2)+j.  In other words, 
+                    -- for biallelic sites the ordering is: AA,AB,BB; for triallelic sites the ordering is: 
+                    -- AA,AB,BB,AC,BC,CC, etc.  For example: GT:GL 0/1:-323.03,-99.29,-802.53 (Floats)
+                    -- genotype_likelihood float,
+
+                    -- foreign key (vc_id) references vc(id),
+                    -- vc
+                    -- primary key (vc_id, allele1, allele2)
+
+                    -- END vc_genotype fields
+
+                >
+            >
+
             -- END vc fields
-
-        >
-    >,
-
-    -- ref and alt alleles
-    alleles array<
-        struct<
-
-            -- BEGIN vc_allele fields
-
-            -- vc_id: bigint, -- not null,
-            -- if we ever have multiple groups for a vc, we need this
-            -- vc_group_id bigint not null,
-            allele: string,
-
-            -- vcf 4.1 genotype fields
-
-            -- AD (from vcf Project_PBC.121113.recal.filtered.snps.vcf):
-            -- ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
-            allelic_depth: int
-
-            -- foreign key (vc_id) references vc(id),
-            -- vc
-            -- primary key (vc_id, allele)
-
-            -- END vc_allele fields
-
-        >
-    >,
-
-    genotypes array<
-        struct<
-
-            -- BEGIN vc_genotype fields
-
-            -- vc_id: bigint, -- not null,
-            -- if we ever have multiple groups for a vc, we need this
-            -- vc_group_id bigint not null,
-            allele1: string,
-            allele2: string,
-
-            -- vcf 4.1 genotype fields
-
-            -- PL:
-            -- the phred-scaled genotype likelihoods rounded to the closest int (and otherwise defined 
-            -- precisely as the GL field) (Integers)
-            phred_likelihood: int
-
-            -- vcf 4.1 genotype fields to be added later when needed
-
-            -- GL:
-            -- genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for 
-            -- all possible genotypes given the set of alleles defined in the REF and ALT fields. In presence of 
-            -- the GT field the same ploidy is expected and the canonical order is used; without GT field, 
-            -- diploidy is assumed. If A is the allele in REF and B,C,... are the alleles as ordered in ALT, the 
-            -- ordering of genotypes for the likelihoods is given by: F(j/k) = (k*(k+1)/2)+j.  In other words, 
-            -- for biallelic sites the ordering is: AA,AB,BB; for triallelic sites the ordering is: 
-            -- AA,AB,BB,AC,BC,CC, etc.  For example: GT:GL 0/1:-323.03,-99.29,-802.53 (Floats)
-            -- genotype_likelihood float,
-
-            -- foreign key (vc_id) references vc(id),
-            -- vc
-            -- primary key (vc_id, allele1, allele2)
-
-            -- END vc_genotype fields
 
         >
     >,

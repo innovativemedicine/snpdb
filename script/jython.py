@@ -8,8 +8,8 @@ def main():
     # parser.add_argument('--madeup')
     args, extra_args = parser.parse_known_args()
     jython_args = []
-    if 'JYTHONPATH' in env:
-        jython_args.append("-Dpython.path=" + env['JYTHONPATH'])
+    if 'JYTHONPATH' in env or 'PYTHONPATH' in env:
+        jython_args.append("-Dpython.path=" + env.get('JYTHONPATH', "") + env.get('PYTHONPATH', ""))
     # /usr/bin/jython -Dpython.path=$JYTHONPATH
     subprocess.check_call(["jython"] + jython_args + extra_args)
 

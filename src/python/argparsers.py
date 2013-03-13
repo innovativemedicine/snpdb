@@ -19,6 +19,21 @@ def sql_parser(description=None):
     parser.add_argument('db', help='database name')
     return parser
 
+def hive_option_parser(description=None):
+    """
+    Return a arugment parser with the typical database options (minus database name positional argument).
+    """
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    return parser
+
+def hive_parser(description=None):
+    """
+    Return a arugment parser with the typical database arguments.
+    """
+    parser = hive_option_parser(description=description)
+    parser.add_argument('db', help='jdbc:hive2 database connect string')
+    return parser
+
 def add_sql_options(parser):
     parser.add_argument('--host', help='database hostname', default='localhost')
     parser.add_argument('--port', type=int, help='database port', default='3306')
