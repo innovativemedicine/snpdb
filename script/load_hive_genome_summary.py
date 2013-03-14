@@ -15,15 +15,19 @@ import vcf
 import hive
 
 def main():
-    parser = argparsers.sql_parser(description="Load a genome summary file from the pipeline into the snpdb Hive database")
-    parser.add_argument('genome_summary_file', nargs="*")
+    parser = argparsers.hive_parser(description="Load a genome summary file from the pipeline into the snpdb Hive database")
+    parser.add_argument('genome_summary_file')
+    parser.add_argument("--table", default="variant", help="hive table to load data into")
     parser.add_argument("--delim", default=",", help="delimiter")
     parser.add_argument("--quote", default='"', help="quote character")
     parser.add_argument("--dry-run", action="store_true", help="skip insertion")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
     args = parser.parse_args()
+    
+    connectstring = args.connectstring if args.connectstring is not None else argparsers.hive_connectstring(args.host, args.port, args.database)
 
-    input = fileinput.FileInput(args.genome_summary_file)
+    # input = fileinput.FileInput(args.genome_summary_file)
+    input = open(args.genome_summary_file, 'rb')
     skip_header = not args.no_skip_header
     if skip_header:
         try:
@@ -38,7 +42,7 @@ def main():
     # driverName = "org.apache.hadoop.hive.jdbc.HiveDriver";
     # driverName = "org.apache.hive.jdbc.HiveDriver";
 
-    conn = connect("jdbc:hive2://master:10000")
+    conn = connect(connectstring)
 
     # ds = HiveDataSource()
     # ds.setServerName("master")
@@ -74,28 +78,39 @@ def main():
     while res.next():
         print res.getString(1)
 
-    load_genome_summary(input, stmt, args.delim, args.quote, args.dry_run)
+    load_genome_summary(args.table, input, stmt, args.delim, args.quote, args.dry_run)
 
+    input.close()
     conn.close()
 
 def load_genome_summary(table, input, stmt, delim=",", quote='"', dry_run=False):
+    import pdb; pdb.set_trace()
     tmpdir = tempfile.mkdtemp()
     tmp_loadfile = os.path.join(tmpdir, 'myfifo')
     # print tmp_loadfile
     # try:
-    os.mkfifo(tmp_loadfile)
+
+    # os.mkfifo is not supported in jython (sigh)
+    # os.mkfifo(tmp_loadfile)
+
     try:
         # except OSError, e:
         #     print "Failed to create FIFO: %s" % e
         #     return False    
-        loadfile_writer = threading.Thread(target=write_snpdb_loadfile, args=(input, tmp_loadfile))
+        # loadfile_writer = threading.Thread(target=write_snpdb_loadfile, args=(input, tmp_loadfile))
+        write_snpdb_loadfile(input, tmp_loadfile)
         
         res = stmt.executeQuery("LOAD DATA LOCAL INPATH '%(tmp_loadfile)s' INTO TABLE %(table)s" % { 
             'tmp_loadfile':tmp_loadfile, 'table':table })
 
-        loadfile_writer.join()
+        # loadfile_writer.join()
+    except:
+        raise
     finally:
-        os.remove(tmp_loadfile)
+        try:
+            os.remove(tmp_loadfile)
+        except OSError:
+            pass
         os.rmdir(tmpdir)
 
 def dummy_id_generator():
@@ -193,7 +208,6 @@ def snpdb_load_data(input):
         #         >
         #     >
         # ); 
-
         yield (
             # vc_group.columns['id'], 
             vc_group_id,
@@ -201,7 +215,8 @@ def snpdb_load_data(input):
             vc_group.columns['start_posn'], 
             vc_group.columns['end_posn'], 
             vc_group.columns['ref'], 
-            vc_group.columns['alt_alleles'], 
+            # vc_group alt alleles
+            [vc_group_allele.columns['allele'] for vc_group_allele in vc_group.vc_group_allele],
             vc_group.columns['dbsnp_id'], 
             vc_group.columns['quality'], 
             vc_group.columns['filter'], 
@@ -288,7 +303,7 @@ def snpdb_load_data(input):
         )
 
 def write_snpdb_loadfile(input, filename):
-    hive.write_loadfile(snpdb_load_data, filename)
+    hive.write_loadfile(snpdb_load_data(input), filename)
 
 # "with" statement is not implemented in jython 2.2.1
 # class HiveConnection:

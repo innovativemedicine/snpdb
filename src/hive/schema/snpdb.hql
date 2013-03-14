@@ -137,7 +137,10 @@ CREATE TABLE variant (
     -- END vc_group fields
 
     -- indexed by patient_id
-    vc map<bigint, 
+    -- can't seem to query vc[someindex] since it gives us a type error if its a bigint... might want to just make this an array  
+    -- instead
+    -- vc map<bigint, 
+    vc map<int, 
         struct<
 
             -- BEGIN vc fields
