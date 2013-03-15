@@ -17,8 +17,10 @@ def main():
     env = Environment(loader = FileSystemLoader(['./', '/']))
 
     import re
+    import itertools
     modules = {
             're': re,
+            'itertools': itertools,
             }
 
     modules.update(environ)

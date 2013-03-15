@@ -22,7 +22,12 @@ def main():
     parser.add_argument("--quote", default='"', help="quote character")
     parser.add_argument("--dry-run", action="store_true", help="skip insertion")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
+    parser.add_argument("--loadfile", nargs="?", const=False, help="filename of hive loadfile that can be used in a LOAD DATA hql statement (skips loading data remotely)")
     args = parser.parse_args()
+
+    if args.loadfile is False:
+        # they passed "--loadfile" without an argument
+        args.loadfile = args.genome_summary_file + '.hld'
     
     connectstring = args.connectstring if args.connectstring is not None else argparsers.hive_connectstring(args.host, args.port, args.database)
 
@@ -36,82 +41,96 @@ def main():
             # empty input
             pass
 
-    # with HiveConnection("jdbc:hive2://master:10000") as conn:
-    # print conn
+    stmt = None
+    conn = None
+    if args.loadfile is None:
 
-    # driverName = "org.apache.hadoop.hive.jdbc.HiveDriver";
-    # driverName = "org.apache.hive.jdbc.HiveDriver";
+        # with HiveConnection("jdbc:hive2://master:10000") as conn:
+        # print conn
 
-    conn = connect(connectstring)
+        # driverName = "org.apache.hadoop.hive.jdbc.HiveDriver";
+        # driverName = "org.apache.hive.jdbc.HiveDriver";
 
-    # ds = HiveDataSource()
-    # ds.setServerName("master")
-    # ds.setPortNumber(10000)
-    # conn = ds.getConnection()
+        conn = connect(connectstring)
 
-    # com.dbaccess.BasicDataSource ds = new com.dbaccess.BasicDataSource();
-    # ds.setServerName("grinder");
-    # ds.setDatabaseName("CUSTOMER_ACCOUNTS");
-    # ds.setDescription("Customer accounts database for billing");
+        # ds = HiveDataSource()
+        # ds.setServerName("master")
+        # ds.setPortNumber(10000)
+        # conn = ds.getConnection()
 
-    # try:
-    #     Class.forName(driverName);
-    # except Exception, e:
-    #     print "Unable to load %s" % driverName
-    #     raise
-    #     System.exit(1);
+        # com.dbaccess.BasicDataSource ds = new com.dbaccess.BasicDataSource();
+        # ds.setServerName("grinder");
+        # ds.setDatabaseName("CUSTOMER_ACCOUNTS");
+        # ds.setDescription("Customer accounts database for billing");
 
-    # DriverManager.registerDriver(org.apache.hive.jdbc.HiveDriver)
+        # try:
+        #     Class.forName(driverName);
+        # except Exception, e:
+        #     print "Unable to load %s" % driverName
+        #     raise
+        #     System.exit(1);
 
-    # conn = DriverManager.getConnection("jdbc:hive2://master:10000");
-    stmt = conn.createStatement();
+        # DriverManager.registerDriver(org.apache.hive.jdbc.HiveDriver)
 
-    # Drop table
-    #stmt.executeQuery("DROP TABLE testjython")
+        # conn = DriverManager.getConnection("jdbc:hive2://master:10000");
+        stmt = conn.createStatement();
 
-    # Create a table
-    # res = stmt.executeQuery("CREATE TABLE testjython (key int, value string) ROW FORMAT DELIMITED FIELDS TERMINATED BY ':'")
+        # Drop table
+        #stmt.executeQuery("DROP TABLE testjython")
 
-    # Show tables
-    res = stmt.executeQuery("SHOW TABLES")
-    print "List of tables:"
-    while res.next():
-        print res.getString(1)
+        # Create a table
+        # res = stmt.executeQuery("CREATE TABLE testjython (key int, value string) ROW FORMAT DELIMITED FIELDS TERMINATED BY ':'")
 
-    load_genome_summary(args.table, input, stmt, args.delim, args.quote, args.dry_run)
+        # Show tables
+        res = stmt.executeQuery("SHOW TABLES")
+        print "List of tables:"
+        while res.next():
+            print res.getString(1)
+
+    load_genome_summary(args.table, input, args.delim, args.quote, args.dry_run, args.loadfile, stmt)
 
     input.close()
-    conn.close()
 
-def load_genome_summary(table, input, stmt, delim=",", quote='"', dry_run=False):
-    import pdb; pdb.set_trace()
-    tmpdir = tempfile.mkdtemp()
-    tmp_loadfile = os.path.join(tmpdir, 'myfifo')
-    # print tmp_loadfile
+    if args.loadfile is None:
+        conn.close()
+
+def load_genome_summary(table, input, delim=",", quote='"', dry_run=False, loadfile=None, stmt=None):
+    using_tmpfile = False
+    tmpdir = None
+    if loadfile is None:
+        using_tmpfile = True
+        tmpdir = tempfile.mkdtemp()
+        loadfile = os.path.join(tmpdir, 'myfifo')
+    # print loadfile
     # try:
 
     # os.mkfifo is not supported in jython (sigh)
-    # os.mkfifo(tmp_loadfile)
+    # os.mkfifo(loadfile)
 
     try:
         # except OSError, e:
         #     print "Failed to create FIFO: %s" % e
         #     return False    
-        # loadfile_writer = threading.Thread(target=write_snpdb_loadfile, args=(input, tmp_loadfile))
-        write_snpdb_loadfile(input, tmp_loadfile)
+        # loadfile_writer = threading.Thread(target=write_snpdb_loadfile, args=(input, loadfile))
+        write_snpdb_loadfile(input, loadfile)
         
-        res = stmt.executeQuery("LOAD DATA LOCAL INPATH '%(tmp_loadfile)s' INTO TABLE %(table)s" % { 
-            'tmp_loadfile':tmp_loadfile, 'table':table })
+        if using_tmpfile:
+            # this doesn't actually work since hive will just look on the server it's being run on, not the client
+            # TODO: copy the file to hdfs / the hive server first, LOAD DATA, then remove it afterwards
+            raise NotImplementedError
+            res = stmt.executeQuery("LOAD DATA LOCAL INPATH '%(loadfile)s' INTO TABLE %(table)s" % { 
+                'loadfile':loadfile, 'table':table })
 
         # loadfile_writer.join()
     except:
         raise
     finally:
-        try:
-            os.remove(tmp_loadfile)
-        except OSError:
-            pass
-        os.rmdir(tmpdir)
+        if using_tmpfile:
+            try:
+                os.remove(loadfile)
+            except OSError:
+                pass
+            os.rmdir(tmpdir)
 
 def dummy_id_generator():
     i = 1

@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS {{HIVE_SNPDB_TABLE}};
+{{ HIVE_1_HIVE_TABLE_DDL }}
+{% for loadfile in HIVE_SNPDB_LOADFILES.split(' ') -%}
+LOAD DATA LOCAL INPATH '{{loadfile}}' INTO TABLE {{HIVE_SNPDB_TABLE}};
+{% endfor -%}

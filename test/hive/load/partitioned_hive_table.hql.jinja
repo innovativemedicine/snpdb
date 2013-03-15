@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS {{HIVE_SNPDB_TABLE}};
+{{ HIVE_PARTITIONED_HIVE_TABLE_DDL }}
+{% for loadfile, filename in itertools.izip(HIVE_SNPDB_LOADFILES.split(' '), HIVE_SNPDB_PARTITIONS.split(' ')) -%}
+LOAD DATA LOCAL INPATH '{{loadfile}}' INTO TABLE {{HIVE_SNPDB_TABLE}} PARTITION (filename='{{filename}}');
+{% endfor -%}
