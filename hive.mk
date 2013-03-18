@@ -3,5 +3,4 @@ export HIVE_SNPDB_PARTITIONS := $(patsubst %.hld,%,$(notdir $(HIVE_SNPDB_LOADFIL
 export HIVE_SNPDB_TABLE := variant
 HIVE_DDL = $(shell $(MAKE_SCRIPTS)/strip_sql.sh $1)
 
-export HIVE_1_HIVE_TABLE_DDL := $(call HIVE_DDL,src/hive/schema/snpdb.hql)
-export HIVE_PARTITIONED_HIVE_TABLE_DDL := $(call HIVE_DDL,src/hive/schema/snpdb_partitioned.hql)
+export HIVE_PARTITIONED_HIVE_TABLE_DDL := $(call HIVE_DDL,src/hive/schema/snpdb.hql)

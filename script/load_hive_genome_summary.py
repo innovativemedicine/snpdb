@@ -2,13 +2,15 @@
 from java.lang import *
 from java.lang import *
 from java.sql import *
-from org.apache.hive.jdbc import HiveDataSource, HiveDriver
 from java.util import Properties
+
+from org.apache.hive.jdbc import HiveDataSource, HiveDriver
 
 import os
 import tempfile
 import threading
 from itertools import izip
+import subprocess
 
 import argparsers
 import vcf
@@ -22,7 +24,9 @@ def main():
     parser.add_argument("--quote", default='"', help="quote character")
     parser.add_argument("--dry-run", action="store_true", help="skip insertion")
     parser.add_argument("--no-skip-header", action="store_true", help="don't skip the first line (header line)")
-    parser.add_argument("--loadfile", nargs="?", const=False, help="filename of hive loadfile that can be used in a LOAD DATA hql statement (skips loading data remotely)")
+    parser.add_argument("--loadfile", nargs="?", const=False, help="filename of hive loadfile that can be used in a LOAD DATA hql statement")
+    parser.add_argument("--skip-load", action="store_true", help="skip loading the loadfile into the database")
+    parser.add_argument("--remote-tmpdir", default='/tmp', help="remote directory to temporarily store loadfile")
     args = parser.parse_args()
 
     if args.loadfile is False:
@@ -30,16 +34,6 @@ def main():
         args.loadfile = args.genome_summary_file + '.hld'
     
     connectstring = args.connectstring if args.connectstring is not None else argparsers.hive_connectstring(args.host, args.port, args.database)
-
-    # input = fileinput.FileInput(args.genome_summary_file)
-    input = open(args.genome_summary_file, 'rb')
-    skip_header = not args.no_skip_header
-    if skip_header:
-        try:
-            input.next()
-        except StopIteration:
-            # empty input
-            pass
 
     stmt = None
     conn = None
@@ -82,55 +76,56 @@ def main():
         # res = stmt.executeQuery("CREATE TABLE testjython (key int, value string) ROW FORMAT DELIMITED FIELDS TERMINATED BY ':'")
 
         # Show tables
-        res = stmt.executeQuery("SHOW TABLES")
-        print "List of tables:"
-        while res.next():
-            print res.getString(1)
+        # res = stmt.executeQuery("SHOW TABLES")
+        # print "List of tables:"
+        # while res.next():
+        #     print res.getString(1)
 
-    load_genome_summary(args.table, input, args.delim, args.quote, args.dry_run, args.loadfile, stmt)
-
-    input.close()
+    load_genome_summary(args.table, args.genome_summary_file, args.delim, args.quote, args.dry_run, args.loadfile, stmt, args.remote_tmpdir, args.host, args.skip_load, args.no_skip_header)
 
     if args.loadfile is None:
         conn.close()
 
-def load_genome_summary(table, input, delim=",", quote='"', dry_run=False, loadfile=None, stmt=None):
-    using_tmpfile = False
-    tmpdir = None
-    if loadfile is None:
-        using_tmpfile = True
-        tmpdir = tempfile.mkdtemp()
-        loadfile = os.path.join(tmpdir, 'myfifo')
-    # print loadfile
-    # try:
-
-    # os.mkfifo is not supported in jython (sigh)
-    # os.mkfifo(loadfile)
-
+def load_genome_summary(table, genome_summary_file, delim=",", quote='"', dry_run=False, loadfile=None, stmt=None, remote_tmpdir=None, host=None, skip_load=False, no_skip_header=False):
+    input = open(genome_summary_file, 'rb')
     try:
-        # except OSError, e:
-        #     print "Failed to create FIFO: %s" % e
-        #     return False    
-        # loadfile_writer = threading.Thread(target=write_snpdb_loadfile, args=(input, loadfile))
-        write_snpdb_loadfile(input, loadfile)
-        
-        if using_tmpfile:
-            # this doesn't actually work since hive will just look on the server it's being run on, not the client
-            # TODO: copy the file to hdfs / the hive server first, LOAD DATA, then remove it afterwards
-            raise NotImplementedError
-            res = stmt.executeQuery("LOAD DATA LOCAL INPATH '%(loadfile)s' INTO TABLE %(table)s" % { 
-                'loadfile':loadfile, 'table':table })
-
-        # loadfile_writer.join()
-    except:
-        raise
-    finally:
-        if using_tmpfile:
+        skip_header = not no_skip_header
+        if skip_header:
             try:
-                os.remove(loadfile)
-            except OSError:
+                input.next()
+            except StopIteration:
+                # empty input
                 pass
-            os.rmdir(tmpdir)
+
+        using_tmpfile = False
+        tmpdir = None
+        if loadfile is None:
+            using_tmpfile = True
+            tmpdir = tempfile.mkdtemp()
+            loadfile = os.path.join(tmpdir, 'loadfile.hld')
+
+        try:
+            write_snpdb_loadfile(input, loadfile)
+            
+            if not skip_load:
+                filename = os.path.basename(genome_summary_file)
+                remote_file = '%(remote_tmpdir)s/%(filename)s' % locals()
+                subprocess.check_call(['scp', loadfile, '%(host)s:%(remote_file)s' % locals()])
+                res = stmt.executeUpdate("LOAD DATA LOCAL INPATH '%(remote_file)s' OVERWRITE INTO TABLE %(table)s PARTITION (filename='%(filename)s')" % locals())
+                subprocess.check_call(['ssh', host, 'rm', remote_file])
+
+        except:
+            raise
+        finally:
+            if using_tmpfile:
+                try:
+                    os.remove(loadfile)
+                except OSError:
+                    pass
+                os.rmdir(tmpdir)
+    finally:
+        input.close()
+
 
 def dummy_id_generator():
     i = 1

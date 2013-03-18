@@ -374,7 +374,7 @@ CREATE TABLE variant (
             -- END vc_group_allele fields
         >
     >
-); 
+) PARTITIONED BY (filename string); 
 -- STORED BY 'org.apache.hadoop.hive.hbase.HBaseStorageHandler'
 -- WITH SERDEPROPERTIES (
 --     "hbase.columns.mapping" = ":key,a:b,a:c,d:e"
